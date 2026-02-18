@@ -10,7 +10,8 @@ import { AnalysisResult, EmailContext } from '@/lib/types';
 const COOLDOWN_MS = 5000;
 
 export default function AnalyzePage() {
-  const [email, setEmail] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
   const [context, setContext] = useState<EmailContext>({});
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -19,10 +20,15 @@ export default function AnalyzePage() {
   const lastRequestTime = useRef<number>(0);
 
   const handleAnalyze = async () => {
-    if (!email.trim()) {
-      setError('Please paste your email before analyzing.');
+    if (!body.trim()) {
+      setError('Please paste your email body before analyzing.');
       return;
     }
+
+    // Combine into the format the API expects
+    const email = subject.trim()
+      ? `Subject: ${subject.trim()}\n\n${body.trim()}`
+      : body.trim();
 
     const now = Date.now();
     const timeSinceLast = now - lastRequestTime.current;
@@ -100,29 +106,55 @@ export default function AnalyzePage() {
       </div>
 
       {/* Input card */}
-      <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios p-4 space-y-4">
-        <EmailInput value={email} onChange={setEmail} label="Your Email Draft" />
-        <ContextFields value={context} onChange={setContext} />
+      <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
+        {/* Subject line row */}
+        <div className="px-4 py-3 border-b border-ios-sep/20 dark:border-ios-dark-sep/60">
+          <label className="block text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide mb-2">
+            Subject Line
+          </label>
+          <input
+            type="text"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="e.g., quick question about [Company]'s field maintenance"
+            className="w-full text-[15px] bg-transparent text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none font-mono"
+          />
+        </div>
 
-        {error && (
-          <div
-            className="flex items-center gap-2.5 px-4 py-3 rounded-ios-sm text-[14px] text-ios-red"
-            style={{ backgroundColor: 'rgba(255, 59, 48, 0.08)' }}
+        {/* Body row */}
+        <div className="p-4 space-y-4">
+          <EmailInput
+            value={body}
+            onChange={setBody}
+            label="Email Body"
+            placeholder={`Hi [First Name],\n\nSaw that [Company] just expanded to a second facility — congrats.\n\nManaging turf at that scale typically means [pain point]. We help facilities like yours [specific outcome] without [common obstacle].\n\nWould it be worth a quick conversation?\n\n[Your Name]`}
+            rows={10}
+          />
+          <ContextFields value={context} onChange={setContext} />
+        </div>
+
+        {/* Error + button */}
+        <div className="px-4 pb-4 space-y-3">
+          {error && (
+            <div
+              className="flex items-center gap-2.5 px-4 py-3 rounded-ios-sm text-[14px] text-ios-red"
+              style={{ backgroundColor: 'rgba(255, 59, 48, 0.08)' }}
+            >
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              {error}
+            </div>
+          )}
+
+          <button
+            onClick={handleAnalyze}
+            disabled={loading || !body.trim()}
+            className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
           >
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            {error}
-          </div>
-        )}
-
-        <button
-          onClick={handleAnalyze}
-          disabled={loading || !email.trim()}
-          className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
-        >
-          {loading ? 'Analyzing...' : 'Analyze Email'}
-        </button>
+            {loading ? 'Analyzing...' : 'Analyze Email'}
+          </button>
+        </div>
       </div>
 
       {/* Loading */}
