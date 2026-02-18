@@ -4,21 +4,42 @@ interface LoadingStateProps {
 
 export default function LoadingState({ message = 'Analyzing your email...' }: LoadingStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4">
-      <div className="relative w-16 h-16">
-        <div className="absolute inset-0 rounded-full border-4 border-gray-200 dark:border-gray-800" />
-        <div className="absolute inset-0 rounded-full border-4 border-turf-green border-t-transparent animate-spin" />
+    <div className="flex flex-col items-center justify-center py-16 gap-5">
+      {/* iOS-style activity indicator */}
+      <div className="relative w-12 h-12">
+        {Array.from({ length: 12 }).map((_, i) => (
+          <div
+            key={i}
+            className="absolute top-0 left-[50%] w-[2px] h-[6px] rounded-full bg-ios-text-2 dark:bg-ios-text-2"
+            style={{
+              transformOrigin: '50% 24px',
+              transform: `rotate(${i * 30}deg)`,
+              opacity: (i + 1) / 12,
+              animation: `spin 1s steps(12, end) infinite`,
+              animationDelay: `${(i / 12) - 1}s`,
+            }}
+          />
+        ))}
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
+
+      {/* Message */}
       <div className="text-center">
-        <p className="text-gray-700 dark:text-gray-300 font-medium">{message}</p>
-        <p className="text-gray-500 dark:text-gray-500 text-sm mt-1">This usually takes 10-20 seconds</p>
+        <p className="text-[15px] font-medium text-ios-text dark:text-white">{message}</p>
+        <p className="text-[13px] text-ios-text-2 mt-1">Usually takes 10–20 seconds</p>
       </div>
-      <div className="flex gap-1 mt-2">
-        {['Parsing email...', 'Applying rubric...', 'Generating insights...'].map((step, i) => (
+
+      {/* Step pills */}
+      <div className="flex gap-2 mt-1">
+        {['Parsing email', 'Applying rubric', 'Generating insights'].map((step, i) => (
           <div
             key={step}
-            className="px-3 py-1 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 animate-pulse"
-            style={{ animationDelay: `${i * 0.3}s` }}
+            className="px-3 py-1 rounded-full text-[12px] bg-ios-secondary dark:bg-ios-dark-secondary text-ios-text-2 animate-pulse"
+            style={{ animationDelay: `${i * 0.4}s` }}
           >
             {step}
           </div>

@@ -67,12 +67,8 @@ export default function AnalyzePage() {
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6));
-              if (data.error) {
-                throw new Error(data.error);
-              }
-              if (data.chunk) {
-                setStreamBuffer((prev) => prev + data.chunk);
-              }
+              if (data.error) throw new Error(data.error);
+              if (data.chunk) setStreamBuffer((prev) => prev + data.chunk);
               if (data.done && data.result) {
                 setResult(data.result);
                 setStreamBuffer('');
@@ -92,28 +88,29 @@ export default function AnalyzePage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
+    <div className="space-y-5">
+      {/* Page header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Email Analyzer</h1>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">
+        <h1 className="text-[28px] font-bold text-ios-text dark:text-white tracking-tight">
+          Email Analyzer
+        </h1>
+        <p className="text-[15px] text-ios-text-2 mt-1 leading-relaxed">
           Paste your cold email and get a comprehensive scorecard with specific improvements.
         </p>
       </div>
 
-      {/* Input */}
-      <div className="space-y-4">
-        <EmailInput
-          value={email}
-          onChange={setEmail}
-          label="Your Email Draft"
-        />
+      {/* Input card */}
+      <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios p-4 space-y-4">
+        <EmailInput value={email} onChange={setEmail} label="Your Email Draft" />
         <ContextFields value={context} onChange={setContext} />
 
         {error && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <div
+            className="flex items-center gap-2.5 px-4 py-3 rounded-ios-sm text-[14px] text-ios-red"
+            style={{ backgroundColor: 'rgba(255, 59, 48, 0.08)' }}
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             {error}
           </div>
@@ -122,32 +119,40 @@ export default function AnalyzePage() {
         <button
           onClick={handleAnalyze}
           disabled={loading || !email.trim()}
-          className="w-full py-3 px-6 bg-turf-green hover:bg-turf-green-dark disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
+          className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
         >
           {loading ? 'Analyzing...' : 'Analyze Email'}
         </button>
       </div>
 
       {/* Loading */}
-      {loading && <LoadingState />}
+      {loading && (
+        <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios">
+          <LoadingState />
+        </div>
+      )}
 
       {/* Streaming preview */}
       {loading && streamBuffer && (
-        <div className="p-4 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl">
-          <p className="text-xs text-gray-400 mb-2 font-medium uppercase tracking-wide">Processing...</p>
-          <pre className="text-xs text-gray-500 dark:text-gray-500 whitespace-pre-wrap font-mono max-h-32 overflow-hidden">
-            {streamBuffer.slice(-500)}
+        <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios px-4 py-3">
+          <p className="text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide mb-2">
+            Processing
+          </p>
+          <pre className="text-[12px] text-ios-text-2 whitespace-pre-wrap font-mono max-h-24 overflow-hidden">
+            {streamBuffer.slice(-400)}
           </pre>
         </div>
       )}
 
       {/* Results */}
       {result && !loading && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide px-2">Analysis Results</span>
-            <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+        <div className="space-y-1">
+          <div className="flex items-center gap-3 py-2">
+            <div className="h-px flex-1 bg-ios-sep/40 dark:bg-ios-dark-sep" />
+            <span className="text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide">
+              Analysis Results
+            </span>
+            <div className="h-px flex-1 bg-ios-sep/40 dark:bg-ios-dark-sep" />
           </div>
           <ScoreCard result={result} />
         </div>

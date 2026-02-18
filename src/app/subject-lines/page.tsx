@@ -7,36 +7,39 @@ import { SubjectLine, SubjectLinesResult } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
 
-const STYLE_COLORS: Record<string, string> = {
-  'Question-based': 'text-blue-500 bg-blue-500/10',
-  'Curiosity/intrigue': 'text-purple-500 bg-purple-500/10',
-  'Direct/benefit-led': 'text-green-500 bg-green-500/10',
-  'Personalized': 'text-orange-500 bg-orange-500/10',
-  'Pattern interrupt': 'text-pink-500 bg-pink-500/10',
+// iOS-style style → color mapping
+const STYLE_COLORS: Record<string, { bg: string; text: string }> = {
+  'Question-based':    { bg: 'rgba(0, 122, 255, 0.10)',  text: '#007AFF' },
+  'Curiosity/intrigue':{ bg: 'rgba(175, 82, 222, 0.10)', text: '#AF52DE' },
+  'Direct/benefit-led':{ bg: 'rgba(52, 199, 89, 0.10)',  text: '#34C759' },
+  'Personalized':      { bg: 'rgba(255, 149, 0, 0.10)',  text: '#FF9500' },
+  'Pattern interrupt': { bg: 'rgba(255, 59, 48, 0.10)',  text: '#FF3B30' },
 };
 
-function SpamMeter({ score, level }: { score: number; level: string }) {
-  const colors = {
-    low: 'bg-green-400',
-    medium: 'bg-yellow-400',
-    high: 'bg-red-400',
-  };
+function getStyleColor(style: string) {
+  for (const [key, val] of Object.entries(STYLE_COLORS)) {
+    if (style.toLowerCase().includes(key.toLowerCase())) return val;
+  }
+  return { bg: 'rgba(142, 142, 147, 0.10)', text: '#8E8E93' };
+}
 
-  const textColors = {
-    low: 'text-green-500',
-    medium: 'text-yellow-500',
-    high: 'text-red-500',
+function SpamDot({ level }: { level: string }) {
+  const colors: Record<string, string> = {
+    low: '#34C759',
+    medium: '#FF9500',
+    high: '#FF3B30',
   };
-
+  const color = colors[level] || '#8E8E93';
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-16 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${colors[level as keyof typeof colors] || 'bg-gray-400'}`}
-          style={{ width: `${score * 10}%` }}
-        />
-      </div>
-      <span className={`text-xs font-medium capitalize ${textColors[level as keyof typeof textColors] || 'text-gray-400'}`}>
+    <div
+      className="flex items-center gap-1.5 flex-shrink-0"
+      title={`Spam risk: ${level}`}
+    >
+      <div
+        className="w-2 h-2 rounded-full flex-shrink-0"
+        style={{ backgroundColor: color }}
+      />
+      <span className="text-[12px] font-medium capitalize" style={{ color }}>
         {level}
       </span>
     </div>
@@ -44,32 +47,59 @@ function SpamMeter({ score, level }: { score: number; level: string }) {
 }
 
 function SubjectLineRow({ line }: { line: SubjectLine }) {
-  const styleColor = Object.entries(STYLE_COLORS).find(([key]) =>
-    line.style.toLowerCase().includes(key.toLowerCase())
-  )?.[1] || 'text-gray-500 bg-gray-500/10';
+  const [flashing, setFlashing] = useState(false);
+  const styleColor = getStyleColor(line.style);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(line.text);
+      setFlashing(true);
+      setTimeout(() => setFlashing(false), 600);
+    } catch {
+      /* ignore */
+    }
+  };
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3 border border-gray-200 dark:border-gray-800 rounded-xl hover:border-gray-300 dark:hover:border-gray-700 transition-colors group">
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-          {line.text}
-        </p>
-      </div>
+    <button
+      onClick={handleCopy}
+      className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all duration-150 group ${
+        flashing ? 'bg-ios-blue/8' : 'hover:bg-ios-bg dark:hover:bg-ios-dark-secondary'
+      }`}
+    >
+      {/* Subject text */}
+      <span className="flex-1 text-[15px] text-ios-text dark:text-white font-medium leading-snug">
+        {line.text}
+      </span>
 
+      {/* Metadata */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${styleColor}`}>
+        {/* Style pill */}
+        <span
+          className="px-2 py-0.5 rounded-full text-[11px] font-semibold hidden sm:inline-flex"
+          style={{ backgroundColor: styleColor.bg, color: styleColor.text }}
+        >
           {line.style}
         </span>
-        <div className="text-xs text-gray-400 dark:text-gray-500 text-right leading-tight">
-          <div>{line.charCount} chars</div>
-          <div>{line.wordCount} words</div>
+
+        {/* Stats */}
+        <div className="text-right hidden sm:block">
+          <p className="text-[11px] text-ios-text-2 tabular-nums">{line.charCount} chars</p>
+          <p className="text-[11px] text-ios-text-2 tabular-nums">{line.wordCount} words</p>
         </div>
-        <SpamMeter score={line.spamRiskScore} level={line.spamRisk} />
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-          <CopyButton text={line.text} />
-        </div>
+
+        {/* Spam dot */}
+        <SpamDot level={line.spamRisk} />
+
+        {/* Copy hint */}
+        <svg
+          className="w-4 h-4 text-ios-text-3 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+        </svg>
       </div>
-    </div>
+    </button>
   );
 }
 
@@ -129,9 +159,7 @@ export default function SubjectLinesPage() {
             try {
               const data = JSON.parse(line.slice(6));
               if (data.error) throw new Error(data.error);
-              if (data.done && data.result) {
-                setResult(data.result);
-              }
+              if (data.done && data.result) setResult(data.result);
             } catch (e) {
               if (e instanceof SyntaxError) continue;
               throw e;
@@ -146,45 +174,49 @@ export default function SubjectLinesPage() {
     }
   };
 
-  const groupedByStyle = result?.subjectLines.reduce((acc, line) => {
-    const style = line.style;
-    if (!acc[style]) acc[style] = [];
-    acc[style].push(line);
-    return acc;
-  }, {} as Record<string, SubjectLine[]>);
+  const wordCount = emailBody.split(/\s+/).filter(Boolean).length;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
+    <div className="space-y-5">
+      {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Subject Line Generator</h1>
-        <p className="text-gray-500 dark:text-gray-400 mt-1">
+        <h1 className="text-[28px] font-bold text-ios-text dark:text-white tracking-tight">
+          Subject Lines
+        </h1>
+        <p className="text-[15px] text-ios-text-2 mt-1 leading-relaxed">
           Generate 10 subject line options across 5 styles — with character count and spam risk for each.
         </p>
       </div>
 
-      <div className="space-y-4">
+      {/* Input card */}
+      <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios p-4 space-y-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          <label className="block text-[13px] font-medium text-ios-text-2 mb-2">
             Email Body or Description
           </label>
-          <textarea
-            value={emailBody}
-            onChange={(e) => setEmailBody(e.target.value)}
-            placeholder="Paste your email body, or just describe what the email is about. For example: 'Cold email to athletic directors at universities offering our turf maintenance software that helped Ohio State cut field maintenance costs by 40%'"
-            rows={6}
-            className="w-full px-4 py-3 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-turf-green focus:border-transparent resize-none"
-          />
-          {emailBody && (
-            <p className="text-xs text-gray-400 dark:text-gray-600 mt-1 text-right">
-              {emailBody.split(/\s+/).filter(Boolean).length} words
-            </p>
-          )}
+          <div className="relative">
+            <textarea
+              value={emailBody}
+              onChange={(e) => setEmailBody(e.target.value)}
+              placeholder="Paste your email body, or just describe what it's about. e.g., 'Cold email to athletic directors offering turf maintenance software that helped Ohio State cut costs by 40%'"
+              rows={6}
+              className="w-full px-4 py-3.5 text-[15px] rounded-ios bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150"
+            />
+            {emailBody && (
+              <div className="absolute bottom-3 right-3 text-[11px] text-ios-text-3 tabular-nums pointer-events-none">
+                {wordCount} words
+              </div>
+            )}
+          </div>
         </div>
 
         {error && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">
-            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <div
+            className="flex items-center gap-2.5 px-4 py-3 rounded-ios-sm text-[14px] text-ios-red"
+            style={{ backgroundColor: 'rgba(255, 59, 48, 0.08)' }}
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             {error}
           </div>
@@ -193,62 +225,74 @@ export default function SubjectLinesPage() {
         <button
           onClick={handleGenerate}
           disabled={loading || !emailBody.trim()}
-          className="w-full py-3 px-6 bg-turf-green hover:bg-turf-green-dark disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-colors text-sm"
+          className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
         >
           {loading ? 'Generating...' : 'Generate 10 Subject Lines'}
         </button>
       </div>
 
-      {loading && <LoadingState message="Generating subject line variations..." />}
+      {/* Loading */}
+      {loading && (
+        <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios">
+          <LoadingState message="Generating subject line variations..." />
+        </div>
+      )}
 
+      {/* Results */}
       {result && !loading && (
-        <div className="space-y-6">
-          <div className="flex items-center gap-2">
-            <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
-            <span className="text-xs font-medium text-gray-400 uppercase tracking-wide px-2">
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 py-2">
+            <div className="h-px flex-1 bg-ios-sep/40 dark:bg-ios-dark-sep" />
+            <span className="text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide">
               {result.subjectLines.length} Subject Lines
             </span>
-            <div className="h-px flex-1 bg-gray-200 dark:bg-gray-800" />
+            <div className="h-px flex-1 bg-ios-sep/40 dark:bg-ios-dark-sep" />
           </div>
 
-          {/* Legend */}
+          {/* Style legend */}
           <div className="flex flex-wrap gap-2">
             {Object.entries(STYLE_COLORS).map(([style, color]) => (
-              <span key={style} className={`px-2 py-0.5 text-xs rounded-full font-medium ${color}`}>
+              <span
+                key={style}
+                className="px-2.5 py-1 rounded-full text-[11px] font-semibold"
+                style={{ backgroundColor: color.bg, color: color.text }}
+              >
                 {style}
               </span>
             ))}
           </div>
 
-          {/* Flat list */}
-          <div className="space-y-2">
-            {result.subjectLines.map((line, i) => (
-              <SubjectLineRow key={i} line={line} />
-            ))}
+          {/* Subject lines — iOS table view style */}
+          <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
+            <div className="px-4 pt-3 pb-2">
+              <p className="text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide">
+                Tap any row to copy
+              </p>
+            </div>
+            <div className="divide-y divide-ios-sep/20 dark:divide-ios-dark-sep/60">
+              {result.subjectLines.map((line, i) => (
+                <SubjectLineRow key={i} line={line} />
+              ))}
+            </div>
           </div>
 
-          {/* Tips */}
-          <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl p-4">
-            <h3 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-3">
+          {/* Tips card */}
+          <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios p-4">
+            <p className="text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide mb-3">
               Quick Tips
-            </h3>
-            <ul className="space-y-1.5 text-sm text-gray-600 dark:text-gray-400">
-              <li className="flex gap-2">
-                <span className="text-turf-green flex-shrink-0">→</span>
-                Keep subject lines under 50 characters for full mobile preview
-              </li>
-              <li className="flex gap-2">
-                <span className="text-turf-green flex-shrink-0">→</span>
-                Lowercase often outperforms title case — feels more like a personal email
-              </li>
-              <li className="flex gap-2">
-                <span className="text-turf-green flex-shrink-0">→</span>
-                Test at least 2-3 subject lines before concluding what works
-              </li>
-              <li className="flex gap-2">
-                <span className="text-turf-green flex-shrink-0">→</span>
-                A/B test question-based vs direct lines first — the difference is often significant
-              </li>
+            </p>
+            <ul className="space-y-2">
+              {[
+                'Keep subject lines under 50 characters for full mobile preview',
+                'Lowercase often outperforms title case — feels more like a personal email',
+                'Test at least 2–3 subject lines before concluding what works',
+                'A/B test question-based vs direct lines first — the difference is often significant',
+              ].map((tip) => (
+                <li key={tip} className="flex gap-2.5 text-[14px] text-ios-text dark:text-white">
+                  <span className="text-ios-blue flex-shrink-0 font-medium">›</span>
+                  {tip}
+                </li>
+              ))}
             </ul>
           </div>
         </div>

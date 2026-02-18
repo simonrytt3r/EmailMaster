@@ -1,5 +1,7 @@
 'use client';
 
+import { useRef, useEffect } from 'react';
+
 interface EmailInputProps {
   value: string;
   onChange: (value: string) => void;
@@ -15,6 +17,8 @@ export default function EmailInput({
   rows = 12,
   label,
 }: EmailInputProps) {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
   const defaultPlaceholder = `Subject: quick question about [Company]'s field maintenance
 
 Hi [First Name],
@@ -27,24 +31,36 @@ Would it be worth a quick conversation?
 
 [Your Name]`;
 
+  // Auto-grow textarea
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(el.scrollHeight, rows * 24)}px`;
+  }, [value, rows]);
+
+  const wordCount = value.split(/\s+/).filter(Boolean).length;
+
   return (
     <div className="space-y-2">
       {label && (
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+        <label className="block text-[13px] font-medium text-ios-text-2">
           {label}
         </label>
       )}
       <div className="relative">
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder || defaultPlaceholder}
           rows={rows}
-          className="w-full px-4 py-3 text-sm border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-turf-green focus:border-transparent resize-none font-mono leading-relaxed"
+          className="w-full px-4 py-3.5 text-[15px] rounded-ios bg-white dark:bg-ios-dark-card text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 font-mono leading-relaxed resize-none shadow-ios focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150"
+          style={{ minHeight: `${rows * 24}px` }}
         />
         {value && (
-          <div className="absolute bottom-3 right-3 text-xs text-gray-400 dark:text-gray-600">
-            {value.split(/\s+/).filter(Boolean).length} words
+          <div className="absolute bottom-3 right-3 text-[11px] text-ios-text-3 tabular-nums pointer-events-none">
+            {wordCount} {wordCount === 1 ? 'word' : 'words'}
           </div>
         )}
       </div>

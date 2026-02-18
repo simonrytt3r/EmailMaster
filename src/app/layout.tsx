@@ -3,7 +3,7 @@ import './globals.css';
 import Navigation from '@/components/Navigation';
 
 export const metadata: Metadata = {
-  title: 'Cold Email Lab — Turf Tank',
+  title: 'Cold Email Lab',
   description: 'Analyze, score, and generate cold outreach emails using best practices from the world\'s top email marketers.',
 };
 
@@ -13,16 +13,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <head>
         <script
           dangerouslySetInnerHTML={{
             __html: `
               try {
                 const theme = localStorage.getItem('theme');
-                if (theme === 'light') {
-                  document.documentElement.classList.remove('dark');
-                } else {
+                const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                if (theme === 'dark' || (!theme && prefersDark)) {
                   document.documentElement.classList.add('dark');
                 }
               } catch (e) {}
@@ -30,9 +29,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 antialiased">
+      <body className="min-h-screen bg-ios-bg dark:bg-ios-dark-bg text-ios-text dark:text-white antialiased">
         <Navigation />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="max-w-ios mx-auto px-4 sm:px-5 py-8">
           {children}
         </main>
       </body>
