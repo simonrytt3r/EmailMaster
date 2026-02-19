@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAnthropicClient, parseJSON } from '@/lib/anthropic';
 import { SYSTEM_PROMPT, buildGenerationPrompt, buildRefinementPrompt } from '@/lib/prompts';
-import { GenerateRequest, GenerateResult } from '@/lib/types';
+import { GenerateRequest, GenerateResult, ResearchResult } from '@/lib/types';
+import { buildResearchContext } from '@/lib/prompts';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const body: GenerateRequest & { refine?: { email: string; instructions: string } } = await request.json();
+    const body: GenerateRequest & { refine?: { email: string; instructions: string }; researchResult?: ResearchResult; selectedHooks?: string[] } = await request.json();
 
     if (!body.emailType || !body.offering || !body.targetPersona) {
       if (!body.refine) {
@@ -22,6 +23,10 @@ export async function POST(request: NextRequest) {
 
     let userPrompt: string;
     let isRefinement = false;
+
+    const researchContext = body.researchResult
+      ? buildResearchContext(body.researchResult, body.selectedHooks || [])
+      : undefined;
 
     if (body.refine) {
       isRefinement = true;
@@ -41,6 +46,7 @@ export async function POST(request: NextRequest) {
         tone: body.tone,
         mustInclude: body.mustInclude,
         previousEmail: body.previousEmail,
+        researchContext,
       });
     }
 

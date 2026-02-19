@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAnthropicClient, parseJSON } from '@/lib/anthropic';
 import { SYSTEM_PROMPT, buildAnalysisPrompt } from '@/lib/prompts';
-import { AnalysisResult, AnalyzeRequest } from '@/lib/types';
+import { AnalysisResult, AnalyzeRequest, ResearchResult } from '@/lib/types';
+import { buildResearchContext } from '@/lib/prompts';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: NextRequest) {
   try {
-    const body: AnalyzeRequest = await request.json();
+    const body: AnalyzeRequest & { researchResult?: ResearchResult; selectedHooks?: string[] } = await request.json();
 
     if (!body.email || body.email.trim().length === 0) {
       return NextResponse.json(
@@ -29,7 +30,10 @@ export async function POST(request: NextRequest) {
         }
       : {};
 
-    const userPrompt = buildAnalysisPrompt(body.email, contextMap as Record<string, string>);
+    const researchContext = body.researchResult
+      ? buildResearchContext(body.researchResult, body.selectedHooks || [])
+      : undefined;
+    const userPrompt = buildAnalysisPrompt(body.email, contextMap as Record<string, string>, researchContext);
 
     const encoder = new TextEncoder();
     let buffer = '';

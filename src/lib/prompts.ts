@@ -151,7 +151,11 @@ export const ANALYSIS_SCHEMA = `{
   "topThreeChanges": "<numbered list: 1. ... 2. ... 3. ...>"
 }`;
 
-export function buildAnalysisPrompt(email: string, context?: Record<string, string>): string {
+export function buildAnalysisPrompt(
+  email: string,
+  context?: Record<string, string>,
+  researchContext?: string
+): string {
   const contextStr = context && Object.keys(context).length > 0
     ? `<context>
 ${Object.entries(context)
@@ -161,13 +165,20 @@ ${Object.entries(context)
 </context>`
     : '<context>No additional context provided.</context>';
 
+  const researchSection = researchContext
+    ? `${researchContext}
+
+When analyzing: Score the email's personalization based on whether it effectively uses these real details about the prospect. Generic emails that don't leverage this research should score LOW on personalization.
+`
+    : '';
+
   return `<email_to_analyze>
 ${email}
 </email_to_analyze>
 
 ${contextStr}
 
-Analyze this email thoroughly using all the principles in your system prompt. Score each category honestly — don't inflate scores. Return your complete analysis as valid JSON matching this exact schema:
+${researchSection}Analyze this email thoroughly using all the principles in your system prompt. Score each category honestly — don't inflate scores. Return your complete analysis as valid JSON matching this exact schema:
 
 ${ANALYSIS_SCHEMA}
 
@@ -185,6 +196,7 @@ export function buildGenerationPrompt(params: {
   tone?: string;
   mustInclude?: string;
   previousEmail?: string;
+  researchContext?: string;
 }): string {
   const optionalFields = [
     params.industry && `Industry/Vertical: ${params.industry}`,
@@ -196,6 +208,13 @@ export function buildGenerationPrompt(params: {
     params.previousEmail && `Previous Email (for continuity):\n${params.previousEmail}`,
   ].filter(Boolean).join('\n');
 
+  const researchSection = params.researchContext
+    ? `${params.researchContext}
+
+When generating: Incorporate the selected personalization hooks naturally into the email. The opening line should reference something specific from the research. Don't force all hooks in — use 1-2 naturally.
+`
+    : '';
+
   return `Generate 3 cold email variations for the following brief:
 
 Email Type: ${params.emailType}
@@ -203,7 +222,7 @@ What You're Selling/Offering: ${params.offering}
 Target Persona: ${params.targetPersona}
 ${optionalFields ? optionalFields : ''}
 
-Create exactly 3 variations:
+${researchSection}Create exactly 3 variations:
 1. "The Direct Approach" — leads with the value prop and a clear ask
 2. "The Curiosity Play" — leads with a question or insight that earns a reply
 3. "The Social Proof Lead" — leads with a relevant result, case study, or third-party credibility
@@ -270,6 +289,24 @@ Return as valid JSON:
 }
 
 Return ONLY the JSON object. No markdown, no explanatory text. Apply all subject line best practices from your expertise.`;
+}
+
+export function buildResearchContext(
+  researchResults: object,
+  selectedHooks: string[]
+): string {
+  if (!researchResults) return '';
+  return `
+The user has researched this prospect. Here is what was found:
+
+<prospect_research>
+${JSON.stringify(researchResults, null, 2)}
+</prospect_research>
+
+${selectedHooks.length > 0 ? `<selected_hooks>
+${selectedHooks.join('\n')}
+</selected_hooks>` : ''}
+`;
 }
 
 export function buildRefinementPrompt(email: string, instructions: string): string {

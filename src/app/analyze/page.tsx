@@ -5,7 +5,8 @@ import EmailInput from '@/components/EmailInput';
 import ContextFields from '@/components/ContextFields';
 import ScoreCard from '@/components/ScoreCard';
 import LoadingState from '@/components/LoadingState';
-import { AnalysisResult, EmailContext } from '@/lib/types';
+import ProspectResearch from '@/components/ProspectResearch';
+import { AnalysisResult, EmailContext, ResearchResult } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
 
@@ -17,6 +18,14 @@ export default function AnalyzePage() {
   const [error, setError] = useState<string | null>(null);
   const [streamBuffer, setStreamBuffer] = useState('');
   const lastRequestTime = useRef<number>(0);
+
+  const [researchResult, setResearchResult] = useState<ResearchResult | null>(null);
+  const [selectedHooks, setSelectedHooks] = useState<string[]>([]);
+
+  const handleResearchComplete = (research: ResearchResult | null, hooks: string[]) => {
+    setResearchResult(research);
+    setSelectedHooks(hooks);
+  };
 
   const handleAnalyze = async () => {
     if (!email.trim()) {
@@ -41,7 +50,12 @@ export default function AnalyzePage() {
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, context }),
+        body: JSON.stringify({
+          email,
+          context,
+          researchResult: researchResult || undefined,
+          selectedHooks: selectedHooks.length > 0 ? selectedHooks : undefined,
+        }),
       });
 
       if (!response.ok) {
@@ -101,7 +115,25 @@ export default function AnalyzePage() {
         </p>
       </div>
 
-      {/* Input */}
+      {/* Step indicator */}
+      <div className="flex items-center gap-3 text-xs font-medium text-gray-400">
+        <span className={`flex items-center gap-1.5 ${researchResult ? 'text-blue-500' : 'text-gray-400'}`}>
+          <span className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold ${researchResult ? 'bg-blue-500 text-white' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'}`}>
+            {researchResult ? '✓' : '1'}
+          </span>
+          Research
+        </span>
+        <div className="h-px flex-1 bg-gray-200 dark:bg-gray-700" />
+        <span className="flex items-center gap-1.5 text-gray-400">
+          <span className="w-5 h-5 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-xs font-bold text-gray-500">2</span>
+          Analyze
+        </span>
+      </div>
+
+      {/* Step 1: Research */}
+      <ProspectResearch onResearchComplete={handleResearchComplete} />
+
+      {/* Step 2: Input */}
       <div className="space-y-4">
         <EmailInput
           value={email}
@@ -109,6 +141,15 @@ export default function AnalyzePage() {
           label="Your Email Draft"
         />
         <ContextFields value={context} onChange={setContext} />
+
+        {researchResult && selectedHooks.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg text-xs text-blue-700 dark:text-blue-400">
+            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            {selectedHooks.length} personalization hook{selectedHooks.length !== 1 ? 's' : ''} selected — will be used to score your email&apos;s personalization
+          </div>
+        )}
 
         {error && (
           <div className="flex items-center gap-2 px-4 py-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg text-sm text-red-700 dark:text-red-400">

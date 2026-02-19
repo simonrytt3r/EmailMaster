@@ -72,3 +72,51 @@ export interface SubjectLinesRequest {
 export interface SubjectLinesResult {
   subjectLines: SubjectLine[];
 }
+
+// Prospect Research types
+export interface PersonalizationHook {
+  hook: string;
+  emailAngle: string;
+  strength: 'strong' | 'medium' | 'weak';
+}
+
+export interface ResearchOrganization {
+  summary: string;
+  size: string;
+  sports: string[];
+  recentNews: string[];
+  challenges: string[];
+  keyFacts: string[];
+}
+
+export interface ResearchPerson {
+  summary: string;
+  role: string;
+  tenure: string;
+  recentActivity: string[];
+  notableItems: string[];
+}
+
+export interface ResearchResult {
+  organization: ResearchOrganization;
+  person: ResearchPerson;
+  personalizationHooks: PersonalizationHook[];
+  sources: string[];
+}
+
+export interface ResearchRequest {
+  personName?: string;
+  jobTitle?: string;
+  company: string;
+  linkedinUrl?: string;
+  websiteUrl?: string;
+}
+
+export interface ResearchHistoryEntry {
+  id: string;
+  timestamp: number;
+  personName?: string;
+  jobTitle?: string;
+  company: string;
+  result: ResearchResult;
+}
