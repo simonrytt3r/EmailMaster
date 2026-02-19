@@ -27,40 +27,37 @@ export async function POST(request: NextRequest) {
       .filter(Boolean)
       .join('\n');
 
-    const prompt = `Research this sales prospect and return a JSON object with personalization data.
+    const prompt = `You are a sales research assistant. Use web search to research the prospect below, then output ONLY a raw JSON object — no prose, no markdown, no "Here is..." preamble. Your entire response must be parseable by JSON.parse().
 
 ${prospectInfo}
 
-Search the web for recent, accurate information. Focus on what a salesperson would actually use to personalise a cold email.
-
-Return ONLY this JSON (no markdown, no extra text):
+Output this exact JSON structure:
 {
   "hooks": [
-    { "text": "specific observation about them (e.g. recent news, role change, initiative)", "useIt": "short suggestion on how to use this in an email opener", "strength": "strong" }
+    { "text": "specific observation (recent news, initiative, award, role change)", "useIt": "one sentence on how to open a cold email with this", "strength": "strong" }
   ],
   "company": {
     "name": "company name",
-    "stats": "one key metric or fast-fact (size, revenue, founded, etc.)",
-    "description": "one clear sentence on what the company does",
-    "tags": ["industry", "sector", "type"],
+    "stats": "one key fact (size, founded, revenue, etc.)",
+    "description": "one sentence — what the company does",
+    "tags": ["industry tag", "sector tag"],
     "bullets": ["key fact 1", "key fact 2", "key fact 3"],
-    "recentNews": ["recent news item 1", "recent news item 2"]
+    "recentNews": ["recent news item (last 12 months only)"]
   },
   "person": {
     "name": "full name",
     "title": "job title",
-    "summary": "2-3 sentence bio — what they do, what they're responsible for",
-    "tenure": "how long they've been in this role / at this company",
-    "recentActivity": ["recent post, talk, or notable activity 1", "recent activity 2"]
+    "summary": "2-3 sentences on their role and responsibilities",
+    "tenure": "time in current role/company",
+    "recentActivity": ["recent post, talk, or activity (last 12 months only)"]
   },
   "sources": ["url1", "url2"]
 }
 
 Rules:
-- Include 3-5 hooks, ordered strongest first
-- Keep all text brief and factual — no padding
-- Only include recentNews / recentActivity items that are genuinely recent (last 12 months)
-- If you can't find something, use an empty array [] or empty string ""`;
+- 3–5 hooks, strongest first
+- If data is unavailable use [] or ""
+- No commentary before or after the JSON`;
 
     // KEY FIX: Use claude-sonnet-4-20250514 (80,000 input tokens/min limit)
     // instead of haiku (10,000 input tokens/min limit) — 8× more headroom.
@@ -79,22 +76,29 @@ Rules:
       messages: [{ role: 'user', content: prompt }],
     });
 
-    // Extract the final text block from the response
-    let finalText = '';
-    for (const block of response.content) {
-      if (block.type === 'text') {
-        finalText = block.text;
-      }
-    }
+    // Collect all text blocks (Claude may emit text before/after tool calls)
+    const allText = response.content
+      .filter((b: any) => b.type === 'text')
+      .map((b: any) => b.text)
+      .join('');
 
-    if (!finalText) {
+    if (!allText) {
       return NextResponse.json(
         { error: 'No response from AI' },
         { status: 500 }
       );
     }
 
-    const result = parseJSON<ResearchResult>(finalText);
+    // Extract the outermost {...} JSON object — handles any preamble/postamble
+    const jsonMatch = allText.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      return NextResponse.json(
+        { error: 'AI did not return a JSON object' },
+        { status: 500 }
+      );
+    }
+
+    const result = parseJSON<ResearchResult>(jsonMatch[0]);
 
     return NextResponse.json({ result });
   } catch (error) {
