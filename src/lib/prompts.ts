@@ -185,8 +185,14 @@ export function buildGenerationPrompt(params: {
   tone?: string;
   mustInclude?: string;
   previousEmail?: string;
+  personalizationHooks?: string[];
 }): string {
+  const hooksSection = params.personalizationHooks && params.personalizationHooks.length > 0
+    ? `\nPersonalization Hooks (weave at least one naturally into EACH variation's opening line):\n${params.personalizationHooks.map((h, i) => `${i + 1}. ${h}`).join('\n')}\n`
+    : '';
+
   const optionalFields = [
+    hooksSection,
     params.industry && `Industry/Vertical: ${params.industry}`,
     params.painPoints && `Known Pain Points: ${params.painPoints}`,
     params.differentiator && `Key Differentiator/Proof Point: ${params.differentiator}`,

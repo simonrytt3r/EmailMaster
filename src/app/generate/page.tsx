@@ -4,7 +4,8 @@ import { useState, useRef } from 'react';
 import ScoreCard from '@/components/ScoreCard';
 import LoadingState from '@/components/LoadingState';
 import CopyButton from '@/components/CopyButton';
-import { GenerateResult, EmailVariation, AnalysisResult } from '@/lib/types';
+import ResearchPanel from '@/components/ResearchPanel';
+import { GenerateResult, EmailVariation, AnalysisResult, ResearchHook } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
 
@@ -17,6 +18,45 @@ interface RefinedEmail {
 const inputClass =
   'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150';
 const labelClass = 'block text-[12px] font-medium text-ios-text-2 uppercase tracking-wide mb-1.5';
+
+// ─── Step indicator ───────────────────────────────────────────────────────────
+function StepTabs({
+  step,
+  onStepChange,
+  hasResearch,
+}: {
+  step: 1 | 2;
+  onStepChange: (s: 1 | 2) => void;
+  hasResearch: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-0 border-b border-ios-sep/20 dark:border-ios-dark-sep/60">
+      {([1, 2] as const).map((s) => {
+        const active = step === s;
+        const label = s === 1 ? '① Research' : '② Generate';
+        const done = s === 1 && hasResearch;
+        return (
+          <button
+            key={s}
+            onClick={() => onStepChange(s)}
+            className={`flex-1 flex items-center justify-center gap-1.5 py-3 text-[14px] font-semibold transition-colors duration-150 border-b-2 -mb-[1px] ${
+              active
+                ? 'text-ios-blue border-ios-blue'
+                : 'text-ios-text-2 border-transparent hover:text-ios-text dark:hover:text-white'
+            }`}
+          >
+            {label}
+            {done && (
+              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-ios-green/10 text-ios-green uppercase tracking-wide">
+                Done
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 // ─── Variation Card ───────────────────────────────────────────────────────────
 interface VariationCardProps {
@@ -207,6 +247,9 @@ function RefineModal({ email, label, onClose, onRefined }: RefineModalProps) {
 
 // ─── Generate Page ────────────────────────────────────────────────────────────
 export default function GeneratePage() {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [researchHooks, setResearchHooks] = useState<ResearchHook[]>([]);
+
   const [emailType, setEmailType] = useState('Cold outreach (1st touch)');
   const [offering, setOffering] = useState('');
   const [targetPersona, setTargetPersona] = useState('');
@@ -252,6 +295,7 @@ export default function GeneratePage() {
         body: JSON.stringify({
           emailType, offering, targetPersona, industry,
           painPoints, differentiator, desiredCTA, tone, mustInclude, previousEmail,
+          personalizationHooks: researchHooks.map((h) => h.text),
         }),
       });
 
@@ -302,136 +346,176 @@ export default function GeneratePage() {
           Email Generator
         </h1>
         <p className="text-[15px] text-ios-text-2 mt-1 leading-relaxed">
-          Generate 3 high-scoring variations — each with a different approach and instant scorecard.
+          Research your prospect first, then generate 3 personalised email variations — each with a scorecard.
         </p>
       </div>
 
-      {/* Form card */}
+      {/* Main form card */}
       <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
-        <div className="p-4 space-y-4">
-          {/* Required fields */}
-          <div>
-            <label className={labelClass}>Email Type</label>
-            <select value={emailType} onChange={(e) => setEmailType(e.target.value)} className={inputClass}>
-              <option>Cold outreach (1st touch)</option>
-              <option>Follow-up (2nd-3rd touch)</option>
-              <option>Demo invitation</option>
-              <option>Re-engagement</option>
-            </select>
+
+        {/* Step tabs */}
+        <StepTabs step={step} onStepChange={setStep} hasResearch={researchHooks.length > 0} />
+
+        {/* ── Step 1: Research ── */}
+        {step === 1 && (
+          <div className="p-4">
+            <ResearchPanel onHooksChange={setResearchHooks} />
+
+            {/* Done button */}
+            <div className="mt-4 pt-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60">
+              <button
+                onClick={() => setStep(2)}
+                className="w-full h-[44px] bg-ios-blue text-white font-semibold rounded-ios text-[15px] transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
+              >
+                {researchHooks.length > 0
+                  ? `Continue with ${researchHooks.length} hook${researchHooks.length !== 1 ? 's' : ''} selected →`
+                  : 'Skip research → Go to Generate'}
+              </button>
+            </div>
           </div>
+        )}
 
-          <div>
-            <label className={labelClass}>What you&apos;re selling *</label>
-            <input
-              type="text"
-              value={offering}
-              onChange={(e) => setOffering(e.target.value)}
-              placeholder="e.g., Automated turf management software for sports facilities"
-              className={inputClass}
-            />
-          </div>
-
-          <div>
-            <label className={labelClass}>Target Persona *</label>
-            <input
-              type="text"
-              value={targetPersona}
-              onChange={(e) => setTargetPersona(e.target.value)}
-              placeholder="e.g., Athletic Directors at mid-size universities managing multiple fields"
-              className={inputClass}
-            />
-          </div>
-        </div>
-
-        {/* Optional fields disclosure */}
-        <div className="border-t border-ios-sep/20 dark:border-ios-dark-sep/60">
-          <button
-            type="button"
-            onClick={() => setShowOptional(!showOptional)}
-            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-ios-bg dark:hover:bg-ios-dark-secondary transition-colors duration-150 text-left"
-          >
-            <span className="text-[15px] font-medium text-ios-text dark:text-white">
-              Optional context
-              <span className="text-[13px] font-normal text-ios-text-2 ml-2">— improves quality</span>
-            </span>
-            <svg
-              className={`w-4 h-4 text-ios-text-2 transition-transform duration-300 ease-ios flex-shrink-0 ${showOptional ? 'rotate-90' : ''}`}
-              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-
-          {showOptional && (
-            <div className="expand-enter px-4 pb-4 grid grid-cols-2 gap-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60">
-              <div className="pt-4">
-                <label className={labelClass}>Industry</label>
-                <input type="text" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g., K-12 Schools" className={inputClass} />
+        {/* ── Step 2: Generate ── */}
+        {step === 2 && (
+          <>
+            {/* Hooks banner */}
+            {researchHooks.length > 0 && (
+              <div className="mx-4 mt-4 flex items-center gap-2.5 px-3 py-2.5 rounded-ios-sm bg-ios-green/8 ring-1 ring-ios-green/20">
+                <svg className="w-4 h-4 text-ios-green flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-[13px] text-ios-green font-medium">
+                  {researchHooks.length} personalisation hook{researchHooks.length !== 1 ? 's' : ''} selected — will be woven into the generated emails
+                </p>
               </div>
-              <div className="pt-4">
-                <label className={labelClass}>Tone</label>
-                <select value={tone} onChange={(e) => setTone(e.target.value)} className={inputClass}>
-                  <option value="">Any</option>
-                  <option>Casual</option>
-                  <option>Professional</option>
-                  <option>Bold</option>
-                  <option>Consultative</option>
+            )}
+
+            <div className="p-4 space-y-4">
+              {/* Required fields */}
+              <div>
+                <label className={labelClass}>Email Type</label>
+                <select value={emailType} onChange={(e) => setEmailType(e.target.value)} className={inputClass}>
+                  <option>Cold outreach (1st touch)</option>
+                  <option>Follow-up (2nd-3rd touch)</option>
+                  <option>Demo invitation</option>
+                  <option>Re-engagement</option>
                 </select>
               </div>
+
               <div>
-                <label className={labelClass}>Known Pain Points</label>
-                <input type="text" value={painPoints} onChange={(e) => setPainPoints(e.target.value)} placeholder="e.g., High maintenance costs" className={inputClass} />
+                <label className={labelClass}>What you&apos;re selling *</label>
+                <input
+                  type="text"
+                  value={offering}
+                  onChange={(e) => setOffering(e.target.value)}
+                  placeholder="e.g., Automated turf management software for sports facilities"
+                  className={inputClass}
+                />
               </div>
+
               <div>
-                <label className={labelClass}>Key Differentiator</label>
-                <input type="text" value={differentiator} onChange={(e) => setDifferentiator(e.target.value)} placeholder="e.g., Cut time by 60% at Ohio State" className={inputClass} />
+                <label className={labelClass}>Target Persona *</label>
+                <input
+                  type="text"
+                  value={targetPersona}
+                  onChange={(e) => setTargetPersona(e.target.value)}
+                  placeholder="e.g., Athletic Directors at mid-size universities managing multiple fields"
+                  className={inputClass}
+                />
               </div>
-              <div>
-                <label className={labelClass}>Desired CTA</label>
-                <input type="text" value={desiredCTA} onChange={(e) => setDesiredCTA(e.target.value)} placeholder="e.g., Ask if worth a 10-min call" className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Must-Include Details</label>
-                <input type="text" value={mustInclude} onChange={(e) => setMustInclude(e.target.value)} placeholder="e.g., Mention our new mobile app" className={inputClass} />
-              </div>
-              {(emailType === 'Follow-up (2nd-3rd touch)' || emailType === 'Re-engagement') && (
-                <div className="col-span-2">
-                  <label className={labelClass}>Previous Email</label>
-                  <textarea
-                    value={previousEmail}
-                    onChange={(e) => setPreviousEmail(e.target.value)}
-                    placeholder="Paste the previous email you sent..."
-                    rows={4}
-                    className={`${inputClass} resize-none`}
-                  />
+            </div>
+
+            {/* Optional fields disclosure */}
+            <div className="border-t border-ios-sep/20 dark:border-ios-dark-sep/60">
+              <button
+                type="button"
+                onClick={() => setShowOptional(!showOptional)}
+                className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-ios-bg dark:hover:bg-ios-dark-secondary transition-colors duration-150 text-left"
+              >
+                <span className="text-[15px] font-medium text-ios-text dark:text-white">
+                  Optional context
+                  <span className="text-[13px] font-normal text-ios-text-2 ml-2">— improves quality</span>
+                </span>
+                <svg
+                  className={`w-4 h-4 text-ios-text-2 transition-transform duration-300 ease-ios flex-shrink-0 ${showOptional ? 'rotate-90' : ''}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              {showOptional && (
+                <div className="expand-enter px-4 pb-4 grid grid-cols-2 gap-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60">
+                  <div className="pt-4">
+                    <label className={labelClass}>Industry</label>
+                    <input type="text" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g., K-12 Schools" className={inputClass} />
+                  </div>
+                  <div className="pt-4">
+                    <label className={labelClass}>Tone</label>
+                    <select value={tone} onChange={(e) => setTone(e.target.value)} className={inputClass}>
+                      <option value="">Any</option>
+                      <option>Casual</option>
+                      <option>Professional</option>
+                      <option>Bold</option>
+                      <option>Consultative</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Known Pain Points</label>
+                    <input type="text" value={painPoints} onChange={(e) => setPainPoints(e.target.value)} placeholder="e.g., High maintenance costs" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Key Differentiator</label>
+                    <input type="text" value={differentiator} onChange={(e) => setDifferentiator(e.target.value)} placeholder="e.g., Cut time by 60% at Ohio State" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Desired CTA</label>
+                    <input type="text" value={desiredCTA} onChange={(e) => setDesiredCTA(e.target.value)} placeholder="e.g., Ask if worth a 10-min call" className={inputClass} />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Must-Include Details</label>
+                    <input type="text" value={mustInclude} onChange={(e) => setMustInclude(e.target.value)} placeholder="e.g., Mention our new mobile app" className={inputClass} />
+                  </div>
+                  {(emailType === 'Follow-up (2nd-3rd touch)' || emailType === 'Re-engagement') && (
+                    <div className="col-span-2">
+                      <label className={labelClass}>Previous Email</label>
+                      <textarea
+                        value={previousEmail}
+                        onChange={(e) => setPreviousEmail(e.target.value)}
+                        placeholder="Paste the previous email you sent..."
+                        rows={4}
+                        className={`${inputClass} resize-none`}
+                      />
+                    </div>
+                  )}
                 </div>
               )}
             </div>
-          )}
-        </div>
 
-        {/* Error + Button */}
-        <div className="p-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 space-y-3">
-          {error && (
-            <div
-              className="flex items-center gap-2.5 px-4 py-3 rounded-ios-sm text-[14px] text-ios-red"
-              style={{ backgroundColor: 'rgba(255, 59, 48, 0.08)' }}
-            >
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              {error}
+            {/* Error + Button */}
+            <div className="p-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 space-y-3">
+              {error && (
+                <div
+                  className="flex items-center gap-2.5 px-4 py-3 rounded-ios-sm text-[14px] text-ios-red"
+                  style={{ backgroundColor: 'rgba(255, 59, 48, 0.08)' }}
+                >
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  {error}
+                </div>
+              )}
+
+              <button
+                onClick={handleGenerate}
+                disabled={loading || !offering.trim() || !targetPersona.trim()}
+                className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
+              >
+                {loading ? 'Generating 3 variations...' : 'Generate Email Variations'}
+              </button>
             </div>
-          )}
-
-          <button
-            onClick={handleGenerate}
-            disabled={loading || !offering.trim() || !targetPersona.trim()}
-            className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
-          >
-            {loading ? 'Generating 3 variations...' : 'Generate Email Variations'}
-          </button>
-        </div>
+          </>
+        )}
       </div>
 
       {/* Loading */}

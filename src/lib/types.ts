@@ -50,6 +50,7 @@ export interface GenerateRequest {
   tone?: string;
   mustInclude?: string;
   previousEmail?: string;
+  personalizationHooks?: string[];
 }
 
 export interface GenerateResult {
@@ -71,4 +72,42 @@ export interface SubjectLinesRequest {
 
 export interface SubjectLinesResult {
   subjectLines: SubjectLine[];
+}
+
+export interface ResearchHook {
+  text: string;
+  useIt: string;
+  strength: 'strong' | 'medium' | 'weak';
+}
+
+export interface CompanyProfile {
+  name: string;
+  stats: string;
+  description: string;
+  tags: string[];
+  bullets: string[];
+  recentNews: string[];
+}
+
+export interface PersonProfile {
+  name: string;
+  title: string;
+  summary: string;
+  tenure: string;
+  recentActivity: string[];
+}
+
+export interface ResearchResult {
+  hooks: ResearchHook[];
+  company: CompanyProfile;
+  person: PersonProfile;
+  sources: string[];
+}
+
+export interface ResearchRequest {
+  name: string;
+  jobTitle: string;
+  company: string;
+  linkedinUrl?: string;
+  websiteUrl?: string;
 }

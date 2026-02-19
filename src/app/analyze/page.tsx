@@ -5,7 +5,8 @@ import EmailInput from '@/components/EmailInput';
 import ContextFields from '@/components/ContextFields';
 import ScoreCard from '@/components/ScoreCard';
 import LoadingState from '@/components/LoadingState';
-import { AnalysisResult, EmailContext } from '@/lib/types';
+import ResearchPanel from '@/components/ResearchPanel';
+import { AnalysisResult, EmailContext, ResearchHook } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
 
@@ -19,13 +20,15 @@ export default function AnalyzePage() {
   const [streamBuffer, setStreamBuffer] = useState('');
   const lastRequestTime = useRef<number>(0);
 
+  const [researchOpen, setResearchOpen] = useState(false);
+  const [researchHooks, setResearchHooks] = useState<ResearchHook[]>([]);
+
   const handleAnalyze = async () => {
     if (!body.trim()) {
       setError('Please paste your email body before analyzing.');
       return;
     }
 
-    // Combine into the format the API expects
     const email = subject.trim()
       ? `Subject: ${subject.trim()}\n\n${body.trim()}`
       : body.trim();
@@ -43,11 +46,24 @@ export default function AnalyzePage() {
     setStreamBuffer('');
     lastRequestTime.current = now;
 
+    // Include research hooks as additional context for a richer personalization score
+    const enrichedContext: EmailContext = {
+      ...context,
+      additionalContext: [
+        context.additionalContext,
+        researchHooks.length > 0
+          ? `Prospect personalization hooks available: ${researchHooks.map((h) => h.text).join(' | ')}`
+          : '',
+      ]
+        .filter(Boolean)
+        .join('\n'),
+    };
+
     try {
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, context }),
+        body: JSON.stringify({ email, context: enrichedContext }),
       });
 
       if (!response.ok) {
@@ -107,6 +123,40 @@ export default function AnalyzePage() {
 
       {/* Input card */}
       <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
+
+        {/* ── Research your prospect (collapsible) ── */}
+        <div className="border-b border-ios-sep/20 dark:border-ios-dark-sep/60">
+          <button
+            type="button"
+            onClick={() => setResearchOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-ios-bg dark:hover:bg-ios-dark-secondary transition-colors duration-150 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-[15px] font-medium text-ios-text dark:text-white">
+                Research your prospect
+              </span>
+              <span className="text-[13px] font-normal text-ios-text-2">— improves personalisation score</span>
+              {researchHooks.length > 0 && (
+                <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-ios-green/10 text-ios-green">
+                  {researchHooks.length} hook{researchHooks.length !== 1 ? 's' : ''}
+                </span>
+              )}
+            </div>
+            <svg
+              className={`w-4 h-4 text-ios-text-2 transition-transform duration-300 ease-ios flex-shrink-0 ${researchOpen ? 'rotate-90' : ''}`}
+              fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          {researchOpen && (
+            <div className="px-4 pb-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 pt-4">
+              <ResearchPanel onHooksChange={setResearchHooks} />
+            </div>
+          )}
+        </div>
+
         {/* Subject line row */}
         <div className="px-4 py-3 border-b border-ios-sep/20 dark:border-ios-dark-sep/60">
           <label className="block text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide mb-2">
