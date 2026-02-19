@@ -69,6 +69,25 @@ Return your findings as JSON in this exact format:
 Return ONLY the JSON object. No markdown code blocks, no explanatory text.`;
 }
 
+async function callWithRetry(client: ReturnType<typeof getAnthropicClient>, params: Parameters<typeof client.messages.create>[0]) {
+  const delays = [2000, 4000, 8000];
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    try {
+      return await client.messages.create(params);
+    } catch (err: unknown) {
+      const isRateLimit =
+        err instanceof Error &&
+        (err.message.includes('rate_limit') || err.message.includes('429'));
+      if (isRateLimit && attempt < delays.length) {
+        await new Promise((resolve) => setTimeout(resolve, delays[attempt]));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error('Max retries exceeded');
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body: ResearchRequest = await request.json();
@@ -89,12 +108,10 @@ export async function POST(request: NextRequest) {
         try {
           const userPrompt = buildResearchPrompt(personName, jobTitle, company, linkedinUrl, websiteUrl);
 
-          let accumulated = '';
-
-          // Use web_search tool for real-time research
-          const response = await client.messages.create({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 2000,
+          // Haiku keeps token usage well within free-tier rate limits
+          const response = await callWithRetry(client, {
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 1200,
             tools: [
               {
                 type: 'web_search_20250305' as const,
@@ -109,7 +126,8 @@ export async function POST(request: NextRequest) {
             ],
           });
 
-          // Extract text content from the response
+          let accumulated = '';
+
           for (const block of response.content) {
             if (block.type === 'text') {
               accumulated += block.text;
