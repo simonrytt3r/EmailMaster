@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
           // Haiku keeps token usage well within free-tier rate limits
           const response = await callWithRetry(client, {
             model: 'claude-haiku-4-5-20251001',
-            max_tokens: 1200,
+            max_tokens: 2500,
             tools: [
               {
                 type: 'web_search_20250305' as const,
