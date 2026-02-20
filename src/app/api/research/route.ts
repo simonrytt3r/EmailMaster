@@ -90,7 +90,7 @@ async function callWithRetry(
     try {
       return await client.messages.create({
         model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
+        max_tokens: 2500,
         tools: [
           {
             type: 'web_search_20250305',
@@ -164,7 +164,9 @@ export async function POST(request: NextRequest) {
     let result: ResearchResult;
     try {
       result = JSON.parse(cleaned);
-    } catch {
+    } catch (parseErr) {
+      console.error('Research parse error. Raw output:\n', resultText);
+      console.error('Parse error:', parseErr);
       return NextResponse.json(
         { error: 'Research completed but result could not be parsed. Please try again.' },
         { status: 500 }
