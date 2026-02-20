@@ -5,41 +5,62 @@ import { ResearchRequest, ResearchResult } from '@/lib/types';
 export const runtime = 'nodejs';
 
 function buildResearchPrompt(params: ResearchRequest): string {
-  const parts = [
-    `Research this prospect for cold email personalization.`,
-    `Org: ${params.company}`,
-    params.personName ? `Person: ${params.personName}` : '',
-    params.jobTitle ? `Title: ${params.jobTitle}` : '',
-    params.linkedinUrl ? `LinkedIn: ${params.linkedinUrl}` : '',
-    params.websiteUrl ? `Website: ${params.websiteUrl}` : '',
-  ].filter(Boolean);
+  return `Research the following prospect for a cold outreach email. Find specific, useful details that can be used to personalize an email.
 
-  return `${parts.join('\n')}
+Person: ${params.personName || 'Unknown'}
+Title: ${params.jobTitle || 'Unknown'}
+Organization: ${params.company}
+${params.linkedinUrl ? `LinkedIn: ${params.linkedinUrl}` : ''}
+${params.websiteUrl ? `Website: ${params.websiteUrl}` : ''}
 
-Find: org overview, size, sports/facilities, recent news, person's role and recent activity.
-Suggest 2-3 personalization hooks (specific facts, not generic praise).
+Search for and compile:
 
-Return ONLY this JSON (no markdown):
+**About the Organization:**
+- What does the organization do? (school district size, number of fields/facilities, sports programs offered, recent news)
+- Any recent announcements, expansions, new hires, or initiatives?
+- What sports do they manage fields for?
+- Any publicly mentioned challenges or priorities?
+- Approximate size (number of schools, facilities, teams, or members)
+
+**About the Person (if name provided):**
+- Their role and responsibilities
+- How long they've been in this role (if findable)
+- Any recent public statements, interviews, articles, or social media posts
+- Any awards, recognitions, or notable projects
+- Conference appearances or published content
+
+**Personalization Hooks:**
+Based on your research, suggest 3-5 specific personalization angles that could be used in a cold email. These should be specific observations that show genuine research, not generic flattery. Examples:
+- "I saw your district just added 3 new multi-purpose fields for the fall season"
+- "Your LinkedIn post about managing tournament weekends with a small crew really resonated"
+- "Congrats on the new facility — that must mean a lot more field marking to manage"
+
+Return your findings as JSON in this exact format (return ONLY the JSON object, no markdown, no explanatory text):
+
 {
   "organization": {
-    "summary": "2-3 sentences",
-    "size": "e.g. 12 schools, 45 fields",
-    "sports": ["sport1"],
-    "recentNews": ["item1"],
-    "challenges": ["challenge1"],
-    "keyFacts": ["fact1"]
+    "summary": "Brief 2-3 sentence overview",
+    "size": "e.g., 12 schools, 45 fields",
+    "sports": ["football", "soccer", "lacrosse"],
+    "recentNews": ["News item 1", "News item 2"],
+    "challenges": ["Challenge 1", "Challenge 2"],
+    "keyFacts": ["Fact 1", "Fact 2", "Fact 3"]
   },
   "person": {
-    "summary": "2-3 sentences",
-    "role": "title and scope",
-    "tenure": "if known",
-    "recentActivity": ["activity1"],
-    "notableItems": ["item1"]
+    "summary": "Brief 2-3 sentence overview",
+    "role": "Their title and what they oversee",
+    "tenure": "How long in role if known",
+    "recentActivity": ["Activity 1", "Activity 2"],
+    "notableItems": ["Item 1", "Item 2"]
   },
   "personalizationHooks": [
-    {"hook": "specific observation", "emailAngle": "how to use it", "strength": "strong"}
+    {
+      "hook": "The specific observation or fact",
+      "emailAngle": "How to use this in an email opening or body",
+      "strength": "strong"
+    }
   ],
-  "sources": ["url1"]
+  "sources": ["URL 1", "URL 2"]
 }`;
 }
 
