@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
 // ---------------------------------------------------------------------------
 async function tavilySearch(query: string, apiKey: string): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10_000); // 10s max per search
+  const timeout = setTimeout(() => controller.abort(), 5_000); // 5s max — fast APIs respond in <2s
 
   let res: Response;
   try {
@@ -86,37 +86,38 @@ Return ONLY this JSON (no markdown):
 
 // ---------------------------------------------------------------------------
 // Main research function — Tavily path (preferred)
+// Returns null if Tavily yielded no usable results (caller should fall back)
 // ---------------------------------------------------------------------------
 async function researchWithTavily(
   client: Anthropic,
   params: ResearchRequest,
   tavilyKey: string
-): Promise<Anthropic.Messages.Message> {
-  // Run both searches in parallel
+): Promise<Anthropic.Messages.Message | null> {
   const orgQuery = `${params.company} organization sports fields athletic department`;
   const personQuery = params.personName
     ? `${params.personName} ${params.jobTitle ?? ''} ${params.company}`
     : null;
 
-  console.log('[research] Tavily: starting searches. org=', orgQuery, '| person=', personQuery);
+  console.log('[research] Tavily: starting searches for:', params.company);
   const t1 = Date.now();
   const [orgResults, personResults] = await Promise.all([
     tavilySearch(orgQuery, tavilyKey),
     personQuery ? tavilySearch(personQuery, tavilyKey) : Promise.resolve(''),
   ]);
-  console.log(`[research] Tavily searches done in ${Date.now() - t1}ms. org_chars=${orgResults.length}, person_chars=${personResults.length}`);
+  const elapsed = Date.now() - t1;
+  console.log(`[research] Tavily done in ${elapsed}ms. org_chars=${orgResults.length}, person_chars=${personResults.length}`);
 
   const combined = [orgResults, personResults].filter(Boolean).join('\n\n---\n\n');
+
+  if (!combined) {
+    console.warn('[research] Tavily returned no results — will fall back to web_search');
+    return null;
+  }
 
   return client.messages.create({
     model: 'claude-haiku-4-5-20251001',
     max_tokens: 1600,
-    messages: [
-      {
-        role: 'user',
-        content: buildExtractionPrompt(params, combined),
-      },
-    ],
+    messages: [{ role: 'user', content: buildExtractionPrompt(params, combined) }],
   });
 }
 
@@ -171,18 +172,20 @@ export async function POST(request: NextRequest) {
     const client = new Anthropic({ apiKey });
     const tavilyKey = process.env.TAVILY_API_KEY;
 
-    let response: Anthropic.Messages.Message;
+    let response: Anthropic.Messages.Message | null = null;
+    const t0 = Date.now();
+
     if (tavilyKey) {
-      console.log('[research] Using Tavily path for:', body.company);
-      const t0 = Date.now();
       response = await researchWithTavily(client, body, tavilyKey);
-      console.log(`[research] Tavily+Claude finished in ${Date.now() - t0}ms, stop_reason=${response.stop_reason}, tokens=${response.usage?.output_tokens}`);
-    } else {
-      console.log('[research] Using Anthropic web_search fallback for:', body.company);
-      const t0 = Date.now();
-      response = await researchWithWebSearch(client, body);
-      console.log(`[research] web_search finished in ${Date.now() - t0}ms, stop_reason=${response.stop_reason}, tokens=${response.usage?.output_tokens}`);
     }
+
+    if (!response) {
+      // Either no Tavily key, or Tavily returned nothing — use Anthropic web_search
+      console.log('[research] Using Anthropic web_search for:', body.company);
+      response = await researchWithWebSearch(client, body);
+    }
+
+    console.log(`[research] Total time: ${Date.now() - t0}ms | stop_reason=${response.stop_reason} | tokens=${response.usage?.output_tokens}`);
 
     let resultText = '';
     for (const block of response.content) {
@@ -213,14 +216,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    const isRateLimit = message.includes('rate limit') || message.includes('429');
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[research] Unhandled error:', message);
+    const isRateLimit = message.includes('rate limit') || message.includes('429') || message.includes('overloaded');
     return NextResponse.json(
-      {
-        error: isRateLimit
-          ? 'Rate limit reached. Please wait a moment and try again.'
-          : message,
-      },
+      { error: isRateLimit ? 'Rate limit reached. Please wait a moment and try again.' : message },
       { status: isRateLimit ? 429 : 500 }
     );
   }
