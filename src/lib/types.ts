@@ -98,6 +98,7 @@ export interface ResearchResult {
     notableItems: string[];
   };
   personalizationHooks: PersonalizationHook[];
+  personHooks: PersonalizationHook[];
   sources: string[];
 }
 

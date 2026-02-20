@@ -29,11 +29,19 @@ Search for and compile:
 - Any awards, recognitions, or notable projects
 - Conference appearances or published content
 
-**Personalization Hooks:**
-Based on your research, suggest 3-5 specific personalization angles that could be used in a cold email. These should be specific observations that show genuine research, not generic flattery. Examples:
+**Company Personalization Hooks:**
+Suggest 3-5 angles based on the ORGANIZATION — recent news, expansions, facility changes, initiatives, sports programs, challenges. These open with something about the org itself. Examples:
 - "I saw your district just added 3 new multi-purpose fields for the fall season"
-- "Your LinkedIn post about managing tournament weekends with a small crew really resonated"
 - "Congrats on the new facility — that must mean a lot more field marking to manage"
+- "Noticed your department recently took on managing the new stadium complex"
+
+**Person Personalization Hooks:**
+Suggest 2-4 angles based on the INDIVIDUAL — their role, tenure, LinkedIn activity, public statements, career history, job responsibilities, or anything that shows you researched them specifically. Examples:
+- "Your LinkedIn post about managing tournament weekends with a small crew really resonated"
+- "As someone who's been Athletic Director for 8 years, you've probably seen how much field prep has changed"
+- "I noticed you recently moved from coaching into administration — that shift usually comes with a whole new set of logistics challenges"
+
+Both types should be specific and show genuine research, not generic flattery.
 
 Return your findings as JSON in this exact format (return ONLY the JSON object, no markdown, no explanatory text):
 
@@ -55,7 +63,14 @@ Return your findings as JSON in this exact format (return ONLY the JSON object, 
   },
   "personalizationHooks": [
     {
-      "hook": "The specific observation or fact",
+      "hook": "The specific observation or fact about the COMPANY/ORG",
+      "emailAngle": "How to use this in an email opening or body",
+      "strength": "strong"
+    }
+  ],
+  "personHooks": [
+    {
+      "hook": "The specific observation or fact about the PERSON",
       "emailAngle": "How to use this in an email opening or body",
       "strength": "strong"
     }

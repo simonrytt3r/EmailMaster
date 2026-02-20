@@ -56,7 +56,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResearchResult | null>(null);
-  const [selectedHooks, setSelectedHooks] = useState<Set<number>>(new Set());
+  const [selectedHooks, setSelectedHooks] = useState<Set<string>>(new Set());
   const [recentLookups, setRecentLookups] = useState<RecentLookup[]>([]);
   const [showRecent, setShowRecent] = useState(false);
 
@@ -72,12 +72,14 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
 
   // Notify parent whenever result or selected hooks change
   useEffect(() => {
-    const hooks = result
-      ? result.personalizationHooks
-          .filter((_, i) => selectedHooks.has(i))
-          .map((h) => h.hook)
-      : [];
-    onResearchChange(result, hooks);
+    if (!result) { onResearchChange(null, []); return; }
+    const companyHooks = (result.personalizationHooks ?? [])
+      .filter((_, i) => selectedHooks.has(`company-${i}`))
+      .map((h) => h.hook);
+    const personHooks = (result.personHooks ?? [])
+      .filter((_, i) => selectedHooks.has(`person-${i}`))
+      .map((h) => h.hook);
+    onResearchChange(result, [...companyHooks, ...personHooks]);
   }, [result, selectedHooks, onResearchChange]);
 
   function set(field: keyof ResearchInputs, value: string) {
@@ -160,11 +162,11 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
     }
   }
 
-  function toggleHook(index: number) {
+  function toggleHook(key: string) {
     setSelectedHooks((prev) => {
       const next = new Set(prev);
-      if (next.has(index)) next.delete(index);
-      else next.add(index);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }
@@ -348,40 +350,90 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
           {/* Research Results */}
           {result && (
             <div className="p-4 space-y-4">
-              {/* Personalization Hooks — most prominent */}
-              {result.personalizationHooks?.length > 0 && (
-                <div>
-                  <p className="text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide mb-2">
+              {/* Personalization Hooks — split into company + person */}
+              {((result.personalizationHooks?.length > 0) || (result.personHooks?.length > 0)) && (
+                <div className="space-y-4">
+                  <p className="text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide">
                     Personalization Hooks — select the ones to use
                   </p>
-                  <div className="space-y-2">
-                    {result.personalizationHooks.map((hook, i) => {
-                      const selected = selectedHooks.has(i);
-                      return (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => toggleHook(i)}
-                          className={`w-full text-left rounded-ios-sm border p-3 transition-all duration-150 ${hookColour(hook.strength)} ${selected ? 'ring-2 ring-ios-blue' : ''}`}
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-1">
-                            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${hookBadgeColour(hook.strength)}`}>
-                              {hook.strength}
-                            </span>
-                            <span className="text-[13px] font-medium text-ios-blue">
-                              {selected ? '✓ Selected' : 'Tap to select'}
-                            </span>
-                          </div>
-                          <p className="text-[14px] font-medium text-ios-text dark:text-white mb-1">
-                            {hook.hook}
-                          </p>
-                          <p className="text-[13px] text-ios-text-2">
-                            {hook.emailAngle}
-                          </p>
-                        </button>
-                      );
-                    })}
-                  </div>
+
+                  {/* Company hooks */}
+                  {result.personalizationHooks?.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-medium text-ios-text-2 mb-2 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-ios-blue inline-block" />
+                        About the Company
+                      </p>
+                      <div className="space-y-2">
+                        {result.personalizationHooks.map((hook, i) => {
+                          const key = `company-${i}`;
+                          const selected = selectedHooks.has(key);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => toggleHook(key)}
+                              className={`w-full text-left rounded-ios-sm border p-3 transition-all duration-150 ${hookColour(hook.strength)} ${selected ? 'ring-2 ring-ios-blue' : ''}`}
+                            >
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${hookBadgeColour(hook.strength)}`}>
+                                  {hook.strength}
+                                </span>
+                                <span className="text-[13px] font-medium text-ios-blue">
+                                  {selected ? '✓ Selected' : 'Tap to select'}
+                                </span>
+                              </div>
+                              <p className="text-[14px] font-medium text-ios-text dark:text-white mb-1">
+                                {hook.hook}
+                              </p>
+                              <p className="text-[13px] text-ios-text-2">
+                                {hook.emailAngle}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Person hooks */}
+                  {result.personHooks?.length > 0 && (
+                    <div>
+                      <p className="text-[11px] font-medium text-ios-text-2 mb-2 flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-purple-500 inline-block" />
+                        About the Person
+                      </p>
+                      <div className="space-y-2">
+                        {result.personHooks.map((hook, i) => {
+                          const key = `person-${i}`;
+                          const selected = selectedHooks.has(key);
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              onClick={() => toggleHook(key)}
+                              className={`w-full text-left rounded-ios-sm border p-3 transition-all duration-150 ${hookColour(hook.strength)} ${selected ? 'ring-2 ring-purple-500' : ''}`}
+                            >
+                              <div className="flex items-start justify-between gap-2 mb-1">
+                                <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${hookBadgeColour(hook.strength)}`}>
+                                  {hook.strength}
+                                </span>
+                                <span className="text-[13px] font-medium text-ios-blue">
+                                  {selected ? '✓ Selected' : 'Tap to select'}
+                                </span>
+                              </div>
+                              <p className="text-[14px] font-medium text-ios-text dark:text-white mb-1">
+                                {hook.hook}
+                              </p>
+                              <p className="text-[13px] text-ios-text-2">
+                                {hook.emailAngle}
+                              </p>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
