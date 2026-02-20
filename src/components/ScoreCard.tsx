@@ -87,7 +87,9 @@ function CategoryRow({ category }: { category: CategoryScore }) {
 }
 
 export default function ScoreCard({ result, compact = false }: ScoreCardProps) {
-  const emailText = `Subject: ${result.rewrittenEmail.subject}\n\n${result.rewrittenEmail.body}`;
+  const emailText = result.rewrittenEmail
+    ? `Subject: ${result.rewrittenEmail.subject}\n\n${result.rewrittenEmail.body}`
+    : '';
 
   return (
     <div className="space-y-4">

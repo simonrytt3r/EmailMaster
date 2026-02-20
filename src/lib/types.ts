@@ -14,7 +14,7 @@ export interface RewrittenEmail {
 export interface AnalysisResult {
   overallScore: number;
   categories: CategoryScore[];
-  rewrittenEmail: RewrittenEmail;
+  rewrittenEmail?: RewrittenEmail;
   topThreeChanges: string;
 }
 
