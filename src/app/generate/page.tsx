@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import ScoreCard from '@/components/ScoreCard';
 import LoadingState from '@/components/LoadingState';
 import CopyButton from '@/components/CopyButton';
-import { GenerateResult, EmailVariation, AnalysisResult } from '@/lib/types';
+import ProspectResearch from '@/components/ProspectResearch';
+import { GenerateResult, EmailVariation, AnalysisResult, ResearchResult } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
 
@@ -226,6 +227,18 @@ export default function GeneratePage() {
   const [refinedEmail, setRefinedEmail] = useState<RefinedEmail | null>(null);
   const lastRequestTime = useRef<number>(0);
 
+  // Research state
+  const [researchResult, setResearchResult] = useState<ResearchResult | null>(null);
+  const [selectedHooks, setSelectedHooks] = useState<string[]>([]);
+
+  const handleResearchChange = useCallback(
+    (research: ResearchResult | null, hooks: string[]) => {
+      setResearchResult(research);
+      setSelectedHooks(hooks);
+    },
+    []
+  );
+
   const handleGenerate = async () => {
     if (!offering.trim() || !targetPersona.trim()) {
       setError("Please fill in what you're selling and the target persona.");
@@ -246,12 +259,27 @@ export default function GeneratePage() {
     lastRequestTime.current = now;
 
     try {
+      // Append research to mustInclude if available
+      const researchContext = researchResult
+        ? [
+            mustInclude,
+            `PROSPECT RESEARCH:\n${JSON.stringify(researchResult, null, 2)}`,
+            selectedHooks.length > 0
+              ? `SELECTED PERSONALIZATION HOOKS (use 1-2 naturally in the email):\n${selectedHooks.join('\n')}`
+              : '',
+          ]
+            .filter(Boolean)
+            .join('\n\n')
+        : mustInclude;
+
       const response = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           emailType, offering, targetPersona, industry,
-          painPoints, differentiator, desiredCTA, tone, mustInclude, previousEmail,
+          painPoints, differentiator, desiredCTA, tone,
+          mustInclude: researchContext,
+          previousEmail,
         }),
       });
 
@@ -306,9 +334,26 @@ export default function GeneratePage() {
         </p>
       </div>
 
-      {/* Form card */}
+      {/* Step 1: Research (optional) */}
+      <ProspectResearch onResearchChange={handleResearchChange} />
+
+      {/* Step 2: Form card */}
       <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
-        <div className="p-4 space-y-4">
+        {/* Step indicator */}
+        <div className="px-4 pt-3.5 pb-0 flex items-center gap-2.5">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-ios-blue text-white text-[11px] font-bold flex-shrink-0">
+            2
+          </span>
+          <span className="text-[15px] font-medium text-ios-text dark:text-white">
+            Configure Your Email
+          </span>
+          {researchResult && (
+            <span className="text-[12px] text-ios-green font-medium ml-auto">
+              Research context attached ✓
+            </span>
+          )}
+        </div>
+        <div className="p-4 pt-3 space-y-4">
           {/* Required fields */}
           <div>
             <label className={labelClass}>Email Type</label>

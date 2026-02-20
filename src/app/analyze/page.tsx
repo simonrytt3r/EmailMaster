@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import EmailInput from '@/components/EmailInput';
 import ContextFields from '@/components/ContextFields';
 import ScoreCard from '@/components/ScoreCard';
 import LoadingState from '@/components/LoadingState';
-import { AnalysisResult, EmailContext } from '@/lib/types';
+import ProspectResearch from '@/components/ProspectResearch';
+import { AnalysisResult, EmailContext, ResearchResult } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
 
@@ -19,13 +20,24 @@ export default function AnalyzePage() {
   const [streamBuffer, setStreamBuffer] = useState('');
   const lastRequestTime = useRef<number>(0);
 
+  // Research state
+  const [researchResult, setResearchResult] = useState<ResearchResult | null>(null);
+  const [selectedHooks, setSelectedHooks] = useState<string[]>([]);
+
+  const handleResearchChange = useCallback(
+    (research: ResearchResult | null, hooks: string[]) => {
+      setResearchResult(research);
+      setSelectedHooks(hooks);
+    },
+    []
+  );
+
   const handleAnalyze = async () => {
     if (!body.trim()) {
       setError('Please paste your email body before analyzing.');
       return;
     }
 
-    // Combine into the format the API expects
     const email = subject.trim()
       ? `Subject: ${subject.trim()}\n\n${body.trim()}`
       : body.trim();
@@ -43,11 +55,29 @@ export default function AnalyzePage() {
     setStreamBuffer('');
     lastRequestTime.current = now;
 
+    // Build enriched context including research if available
+    const enrichedContext: EmailContext = {
+      ...context,
+      ...(researchResult
+        ? {
+            additionalContext: [
+              context.additionalContext,
+              `PROSPECT RESEARCH:\n${JSON.stringify(researchResult, null, 2)}`,
+              selectedHooks.length > 0
+                ? `SELECTED PERSONALIZATION HOOKS:\n${selectedHooks.join('\n')}`
+                : '',
+            ]
+              .filter(Boolean)
+              .join('\n\n'),
+          }
+        : {}),
+    };
+
     try {
       const response = await fetch('/api/analyze', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, context }),
+        body: JSON.stringify({ email, context: enrichedContext }),
       });
 
       if (!response.ok) {
@@ -105,10 +135,28 @@ export default function AnalyzePage() {
         </p>
       </div>
 
-      {/* Input card */}
+      {/* Step 1: Research (optional) */}
+      <ProspectResearch onResearchChange={handleResearchChange} />
+
+      {/* Step 2: Email input */}
       <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
+        {/* Step indicator */}
+        <div className="px-4 pt-3.5 pb-0 flex items-center gap-2.5">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-ios-blue text-white text-[11px] font-bold flex-shrink-0">
+            2
+          </span>
+          <span className="text-[15px] font-medium text-ios-text dark:text-white">
+            Paste Your Email
+          </span>
+          {researchResult && (
+            <span className="text-[12px] text-ios-green font-medium ml-auto">
+              Research context attached ✓
+            </span>
+          )}
+        </div>
+
         {/* Subject line row */}
-        <div className="px-4 py-3 border-b border-ios-sep/20 dark:border-ios-dark-sep/60">
+        <div className="px-4 py-3 mt-3 border-b border-ios-sep/20 dark:border-ios-dark-sep/60">
           <label className="block text-[11px] font-semibold text-ios-text-2 uppercase tracking-wide mb-2">
             Subject Line
           </label>
