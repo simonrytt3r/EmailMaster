@@ -130,7 +130,7 @@ async function researchWithWebSearch(
 ): Promise<Anthropic.Messages.Message> {
   return client.messages.create({
     model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1300,
+    max_tokens: 2000, // web_search adds <cite> tags which inflate token count
     tools: [
       {
         type: 'web_search_20250305',
@@ -194,13 +194,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const cleaned = resultText
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '')
-      .trim();
+    // Strip citation tags injected by the web_search tool (<cite index="...">...</cite>)
+    // and markdown fences, then find the JSON object
+    const stripped = resultText
+      .replace(/<cite[^>]*>/g, '')
+      .replace(/<\/cite>/g, '');
 
-    console.log('[research] Raw output length:', resultText.length, '| First 200 chars:', resultText.slice(0, 200));
+    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+    const cleaned = jsonMatch ? jsonMatch[0] : stripped.replace(/^```(?:json)?\s*/im, '').replace(/\s*```\s*$/im, '').trim();
+
+    console.log('[research] Raw length:', resultText.length, '| Cleaned start:', cleaned.slice(0, 120));
 
     let result: ResearchResult;
     try {
