@@ -78,7 +78,7 @@ function VariationCard({ variation, onRefine }: VariationCardProps) {
       {/* Scorecard */}
       {showScorecard && variation.scores && (
         <div className="px-4 pb-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 pt-4">
-          <ScoreCard result={variation.scores} compact={true} />
+          <ScoreCard result={variation.scores} compact={false} />
         </div>
       )}
     </div>
@@ -497,20 +497,7 @@ export default function GeneratePage() {
             <div className="h-px flex-1 bg-ios-sep/40 dark:bg-ios-dark-sep" />
           </div>
 
-          {/* Mobile: horizontal carousel */}
-          <div className="sm:hidden -mx-4 px-4">
-            <div className="flex gap-4 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-none"
-              style={{ scrollbarWidth: 'none' }}>
-              {result.variations.map((variation) => (
-                <div key={variation.label} className="snap-start flex-shrink-0 w-[88vw]">
-                  <VariationCard variation={variation} onRefine={(e, l) => setRefineModal({ email: e, label: l })} />
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Desktop: 3-column grid */}
-          <div className="hidden sm:grid sm:grid-cols-3 gap-4">
+          <div className="space-y-4">
             {result.variations.map((variation) => (
               <VariationCard
                 key={variation.label}
