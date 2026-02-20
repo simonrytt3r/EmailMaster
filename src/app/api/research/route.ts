@@ -4,8 +4,58 @@ import { ResearchRequest, ResearchResult } from '@/lib/types';
 
 export const runtime = 'nodejs';
 
-function buildResearchPrompt(params: ResearchRequest): string {
-  return `Research this prospect for a cold outreach email. Be concise.
+// ---------------------------------------------------------------------------
+// Tavily search (dedicated search API — no Anthropic quota consumed)
+// ---------------------------------------------------------------------------
+async function tavilySearch(query: string, apiKey: string): Promise<string> {
+  const res = await fetch('https://api.tavily.com/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      api_key: apiKey,
+      query,
+      max_results: 5,
+      search_depth: 'basic',
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`Tavily search failed: ${res.status}`);
+  }
+
+  const data = await res.json() as {
+    results: { title: string; url: string; content: string }[];
+  };
+
+  // Condense to ~2000 chars so the Claude extraction call stays small
+  return data.results
+    .map((r) => `[${r.title}]\n${r.content?.slice(0, 400) ?? ''}`)
+    .join('\n\n')
+    .slice(0, 2000);
+}
+
+// ---------------------------------------------------------------------------
+// Claude extraction prompt — receives pre-fetched text, no search calls
+// ---------------------------------------------------------------------------
+function buildExtractionPrompt(params: ResearchRequest, searchResults: string): string {
+  return `Extract structured prospect info from these search results for a cold outreach email.
+
+Person: ${params.personName || 'Unknown'}
+Title: ${params.jobTitle || 'Unknown'}
+Org: ${params.company}
+
+SEARCH RESULTS:
+${searchResults}
+
+Return ONLY this JSON (no markdown, no extra text):
+{"organization":{"summary":"2-3 sentences","size":"e.g. 12 schools","sports":["sport1"],"recentNews":["item1"],"challenges":["item1"],"keyFacts":["fact1"]},"person":{"summary":"2-3 sentences","role":"title and scope","tenure":"if known","recentActivity":["item1"],"notableItems":["item1"]},"personalizationHooks":[{"hook":"specific org fact","emailAngle":"how to open an email with this","strength":"strong"}],"personHooks":[{"hook":"specific person fact","emailAngle":"how to open an email with this","strength":"strong"}],"sources":["url1"]}`;
+}
+
+// ---------------------------------------------------------------------------
+// Fallback: Anthropic built-in web_search (used if no TAVILY_API_KEY)
+// ---------------------------------------------------------------------------
+function buildFallbackPrompt(params: ResearchRequest): string {
+  return `Research this prospect for a cold outreach email.
 
 Person: ${params.personName || 'Unknown'}
 Title: ${params.jobTitle || 'Unknown'}
@@ -13,57 +63,73 @@ Org: ${params.company}
 ${params.linkedinUrl ? `LinkedIn: ${params.linkedinUrl}` : ''}
 ${params.websiteUrl ? `Website: ${params.websiteUrl}` : ''}
 
-Do ONE focused search. Return ONLY this JSON (no markdown, no extra text):
-{"organization":{"summary":"2-3 sentences","size":"e.g. 12 schools","sports":["sport1"],"recentNews":["item1"],"challenges":["item1"],"keyFacts":["fact1"]},"person":{"summary":"2-3 sentences","role":"title and scope","tenure":"if known","recentActivity":["item1"],"notableItems":["item1"]},"personalizationHooks":[{"hook":"specific org fact","emailAngle":"how to use it","strength":"strong"}],"personHooks":[{"hook":"specific person fact","emailAngle":"how to use it","strength":"strong"}],"sources":["url1"]}`;
+Search for org facts, recent news, person background, and personalization angles.
+Return ONLY this JSON (no markdown):
+{"organization":{"summary":"2-3 sentences","size":"e.g. 12 schools","sports":["sport1"],"recentNews":["item1"],"challenges":["item1"],"keyFacts":["fact1"]},"person":{"summary":"2-3 sentences","role":"title and scope","tenure":"if known","recentActivity":["item1"],"notableItems":["item1"]},"personalizationHooks":[{"hook":"specific org fact","emailAngle":"how to open an email with this","strength":"strong"}],"personHooks":[{"hook":"specific person fact","emailAngle":"how to open an email with this","strength":"strong"}],"sources":["url1"]}`;
 }
 
-async function callWithRetry(
+// ---------------------------------------------------------------------------
+// Main research function — Tavily path (preferred)
+// ---------------------------------------------------------------------------
+async function researchWithTavily(
   client: Anthropic,
   params: ResearchRequest,
-  maxRetries = 1
+  tavilyKey: string
 ): Promise<Anthropic.Messages.Message> {
-  let lastError: Error | null = null;
+  // Run both searches in parallel
+  const orgQuery = `${params.company} organization sports fields athletic department`;
+  const personQuery = params.personName
+    ? `${params.personName} ${params.jobTitle ?? ''} ${params.company}`
+    : null;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      return await client.messages.create({
-        model: 'claude-haiku-4-5-20251001',
-        max_tokens: 1300,
-        tools: [
-          {
-            type: 'web_search_20250305',
-            name: 'web_search',
-            max_uses: 2,
-          } as unknown as Anthropic.Messages.Tool,
-        ],
-        messages: [
-          {
-            role: 'user',
-            content: buildResearchPrompt(params),
-          },
-        ],
-      });
-    } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      const isRateLimit =
-        lastError.message.includes('rate limit') ||
-        lastError.message.includes('429') ||
-        (error as { status?: number })?.status === 429;
+  const [orgResults, personResults] = await Promise.all([
+    tavilySearch(orgQuery, tavilyKey),
+    personQuery ? tavilySearch(personQuery, tavilyKey) : Promise.resolve(''),
+  ]);
 
-      if (isRateLimit && attempt < maxRetries) {
-        const waitMs = 5_000;
-        console.log(`Rate limited. Waiting ${waitMs / 1000}s before retry ${attempt + 1}/${maxRetries}...`);
-        await new Promise((resolve) => setTimeout(resolve, waitMs));
-        continue;
-      }
+  const combined = [orgResults, personResults].filter(Boolean).join('\n\n---\n\n');
 
-      throw lastError;
-    }
-  }
-
-  throw lastError!;
+  return client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1200,
+    messages: [
+      {
+        role: 'user',
+        content: buildExtractionPrompt(params, combined),
+      },
+    ],
+  });
 }
 
+// ---------------------------------------------------------------------------
+// Fallback research — Anthropic web_search tool (no Tavily key)
+// ---------------------------------------------------------------------------
+async function researchWithWebSearch(
+  client: Anthropic,
+  params: ResearchRequest
+): Promise<Anthropic.Messages.Message> {
+  return client.messages.create({
+    model: 'claude-haiku-4-5-20251001',
+    max_tokens: 1300,
+    tools: [
+      {
+        type: 'web_search_20250305',
+        name: 'web_search',
+        max_uses: 3,
+      } as unknown as Anthropic.Messages.Tool,
+    ],
+    messages: [
+      {
+        role: 'user',
+        content: buildFallbackPrompt(params),
+      },
+    ],
+  });
+}
+
+// ---------------------------------------------------------------------------
+// POST handler
+// ---------------------------------------------------------------------------
 export async function POST(request: NextRequest) {
   try {
     const body: ResearchRequest = await request.json();
@@ -84,7 +150,16 @@ export async function POST(request: NextRequest) {
     }
 
     const client = new Anthropic({ apiKey });
-    const response = await callWithRetry(client, body);
+    const tavilyKey = process.env.TAVILY_API_KEY;
+
+    let response: Anthropic.Messages.Message;
+    if (tavilyKey) {
+      console.log('Using Tavily search path');
+      response = await researchWithTavily(client, body, tavilyKey);
+    } else {
+      console.log('Using Anthropic web_search fallback (add TAVILY_API_KEY for better performance)');
+      response = await researchWithWebSearch(client, body);
+    }
 
     let resultText = '';
     for (const block of response.content) {
@@ -118,7 +193,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         error: isRateLimit
-          ? 'Rate limit reached. Please wait 60 seconds before trying again.'
+          ? 'Rate limit reached. Please wait a moment and try again.'
           : message,
       },
       { status: isRateLimit ? 429 : 500 }
