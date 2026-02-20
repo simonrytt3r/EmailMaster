@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     if (body.refine) {
       isRefinement = true;
       userPrompt = buildRefinementPrompt(
-        `Subject: ${body.refine.email}`,
+        body.refine.email,
         body.refine.instructions
       );
     } else {
