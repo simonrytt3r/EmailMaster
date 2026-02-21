@@ -50,6 +50,7 @@ export interface GenerateRequest {
   tone?: string;
   mustInclude?: string;
   previousEmail?: string;
+  prospectContext?: string;
 }
 
 export interface GenerateResult {
@@ -74,6 +75,14 @@ export interface SubjectLinesResult {
 }
 
 // ─── Prospect Research ────────────────────────────────────────────────────────
+
+export interface ResearchInputs {
+  personName: string;
+  jobTitle: string;
+  company: string;
+  linkedinUrl: string;
+  websiteUrl: string;
+}
 
 export interface PersonalizationHook {
   hook: string;

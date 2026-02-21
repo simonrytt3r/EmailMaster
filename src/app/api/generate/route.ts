@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
         tone: body.tone,
         mustInclude: body.mustInclude,
         previousEmail: body.previousEmail,
+        prospectContext: body.prospectContext,
       });
     }
 

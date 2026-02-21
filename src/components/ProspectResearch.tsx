@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { ResearchResult, PersonalizationHook } from '@/lib/types';
+import { ResearchResult, PersonalizationHook, ResearchInputs } from '@/lib/types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -12,16 +12,8 @@ interface RecentLookup {
   inputs: ResearchInputs;
 }
 
-interface ResearchInputs {
-  personName: string;
-  jobTitle: string;
-  company: string;
-  linkedinUrl: string;
-  websiteUrl: string;
-}
-
 interface ProspectResearchProps {
-  onResearchChange: (research: ResearchResult | null, selectedHooks: string[]) => void;
+  onResearchChange: (research: ResearchResult | null, selectedHooks: string[], inputs?: ResearchInputs) => void;
 }
 
 const SESSION_KEY = 'prospect_research_history';
@@ -56,6 +48,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ResearchResult | null>(null);
+  const [researchedInputs, setResearchedInputs] = useState<ResearchInputs | null>(null);
   const [selectedHooks, setSelectedHooks] = useState<Set<string>>(new Set());
   const [recentLookups, setRecentLookups] = useState<RecentLookup[]>([]);
   const [showRecent, setShowRecent] = useState(false);
@@ -79,8 +72,8 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
     const personHooks = (result.personHooks ?? [])
       .filter((_, i) => selectedHooks.has(`person-${i}`))
       .map((h) => h.hook);
-    onResearchChange(result, [...companyHooks, ...personHooks]);
-  }, [result, selectedHooks, onResearchChange]);
+    onResearchChange(result, [...companyHooks, ...personHooks], researchedInputs ?? undefined);
+  }, [result, selectedHooks, onResearchChange, researchedInputs]);
 
   function set(field: keyof ResearchInputs, value: string) {
     setInputs((prev) => ({ ...prev, [field]: value }));
@@ -107,6 +100,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
   function loadLookup(lookup: RecentLookup) {
     setInputs(lookup.inputs);
     setResult(lookup.result);
+    setResearchedInputs(lookup.inputs);
     setSelectedHooks(new Set());
     setShowRecent(false);
     setOpen(true);
@@ -114,6 +108,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
 
   function handleClear() {
     setResult(null);
+    setResearchedInputs(null);
     setSelectedHooks(new Set());
     setError(null);
   }
@@ -148,6 +143,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
       }
 
       setResult(data.result);
+      setResearchedInputs({ ...inputs });
       saveToSession(data.result, inputs);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong.';

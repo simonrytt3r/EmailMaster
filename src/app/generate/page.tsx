@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import ScoreCard from '@/components/ScoreCard';
 import LoadingState from '@/components/LoadingState';
 import CopyButton from '@/components/CopyButton';
 import ProspectResearch from '@/components/ProspectResearch';
-import { GenerateResult, EmailVariation, AnalysisResult, ResearchResult } from '@/lib/types';
+import { GenerateResult, EmailVariation, AnalysisResult, ResearchResult, ResearchInputs } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
 
@@ -206,6 +206,47 @@ function RefineModal({ email, label, onClose, onRefined }: RefineModalProps) {
   );
 }
 
+// ─── Prospect Context Builder ──────────────────────────────────────────────────
+function buildProspectContext(
+  result: ResearchResult,
+  hooks: string[],
+  inputs: ResearchInputs | null
+): string {
+  const lines: string[] = [];
+
+  const companyName = inputs?.company || 'the company';
+  lines.push(`Company: ${companyName}`);
+  if (result.organization.summary) lines.push(`Summary: ${result.organization.summary}`);
+  if (result.organization.size) lines.push(`Size: ${result.organization.size}`);
+  if (result.organization.sports?.length > 0) lines.push(`Sports/Facilities: ${result.organization.sports.join(', ')}`);
+  if (result.organization.recentNews?.length > 0) lines.push(`Recent news: ${result.organization.recentNews.slice(0, 3).join('; ')}`);
+  if (result.organization.challenges?.length > 0) lines.push(`Known challenges: ${result.organization.challenges.slice(0, 3).join('; ')}`);
+  if (result.organization.keyFacts?.length > 0) lines.push(`Key facts: ${result.organization.keyFacts.slice(0, 3).join('; ')}`);
+
+  if (inputs?.personName || result.person.role || result.person.summary) {
+    lines.push('');
+    if (inputs?.personName && result.person.role) {
+      lines.push(`Person: ${inputs.personName} — ${result.person.role}`);
+    } else if (inputs?.personName) {
+      lines.push(`Person: ${inputs.personName}`);
+    } else if (result.person.role) {
+      lines.push(`Role: ${result.person.role}`);
+    }
+    if (result.person.tenure) lines.push(`Tenure: ${result.person.tenure}`);
+    if (result.person.summary) lines.push(`Background: ${result.person.summary}`);
+    if (result.person.recentActivity?.length > 0) lines.push(`Recent activity: ${result.person.recentActivity.slice(0, 2).join('; ')}`);
+    if (result.person.notableItems?.length > 0) lines.push(`Notable: ${result.person.notableItems.slice(0, 2).join('; ')}`);
+  }
+
+  if (hooks.length > 0) {
+    lines.push('');
+    lines.push('Personalization hooks (use 1-2 naturally per variation — pick the strongest fit):');
+    hooks.forEach((h) => lines.push(`• ${h}`));
+  }
+
+  return lines.join('\n');
+}
+
 // ─── Generate Page ────────────────────────────────────────────────────────────
 export default function GeneratePage() {
   const [emailType, setEmailType] = useState('Cold outreach (1st touch)');
@@ -230,14 +271,31 @@ export default function GeneratePage() {
   // Research state
   const [researchResult, setResearchResult] = useState<ResearchResult | null>(null);
   const [selectedHooks, setSelectedHooks] = useState<string[]>([]);
+  const [researchInputs, setResearchInputs] = useState<ResearchInputs | null>(null);
 
   const handleResearchChange = useCallback(
-    (research: ResearchResult | null, hooks: string[]) => {
+    (research: ResearchResult | null, hooks: string[], inputs?: ResearchInputs) => {
       setResearchResult(research);
       setSelectedHooks(hooks);
+      setResearchInputs(inputs ?? null);
     },
     []
   );
+
+  // Auto-fill empty form fields from research data
+  useEffect(() => {
+    if (!researchResult || !researchInputs) return;
+    if (researchResult.person.role) {
+      setTargetPersona((prev) => (prev.trim() ? prev : researchResult.person.role));
+    }
+    if (researchResult.organization.sports?.length > 0) {
+      setIndustry((prev) => (prev.trim() ? prev : researchResult.organization.sports.slice(0, 2).join(', ')));
+    }
+    if (researchResult.organization.challenges?.length > 0) {
+      setPainPoints((prev) => (prev.trim() ? prev : researchResult.organization.challenges.slice(0, 3).join('; ')));
+      setShowOptional(true);
+    }
+  }, [researchResult, researchInputs]);
 
   const handleGenerate = async () => {
     if (!offering.trim() || !targetPersona.trim()) {
@@ -259,18 +317,9 @@ export default function GeneratePage() {
     lastRequestTime.current = now;
 
     try {
-      // Append research to mustInclude if available
-      const researchContext = researchResult
-        ? [
-            mustInclude,
-            `PROSPECT RESEARCH:\n${JSON.stringify(researchResult, null, 2)}`,
-            selectedHooks.length > 0
-              ? `SELECTED PERSONALIZATION HOOKS (use 1-2 naturally in the email):\n${selectedHooks.join('\n')}`
-              : '',
-          ]
-            .filter(Boolean)
-            .join('\n\n')
-        : mustInclude;
+      const prospectContext = researchResult
+        ? buildProspectContext(researchResult, selectedHooks, researchInputs)
+        : undefined;
 
       const response = await fetch('/api/generate', {
         method: 'POST',
@@ -278,8 +327,9 @@ export default function GeneratePage() {
         body: JSON.stringify({
           emailType, offering, targetPersona, industry,
           painPoints, differentiator, desiredCTA, tone,
-          mustInclude: researchContext,
+          mustInclude,
           previousEmail,
+          prospectContext,
         }),
       });
 
@@ -349,7 +399,7 @@ export default function GeneratePage() {
           </span>
           {researchResult && (
             <span className="text-[12px] text-ios-green font-medium ml-auto">
-              Research context attached ✓
+              Research attached{selectedHooks.length > 0 ? ` · ${selectedHooks.length} hook${selectedHooks.length === 1 ? '' : 's'} selected` : ''} ✓
             </span>
           )}
         </div>

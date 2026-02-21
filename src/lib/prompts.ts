@@ -138,6 +138,7 @@ export function buildGenerationPrompt(params: {
   tone?: string;
   mustInclude?: string;
   previousEmail?: string;
+  prospectContext?: string;
 }): string {
   const optionalFields = [
     params.industry && `Industry/Vertical: ${params.industry}`,
@@ -149,8 +150,12 @@ export function buildGenerationPrompt(params: {
     params.previousEmail && `Previous Email (for continuity):\n${params.previousEmail}`,
   ].filter(Boolean).join('\n');
 
-  return `Generate 3 cold email variations for the following brief:
+  const prospectSection = params.prospectContext
+    ? `\n## PROSPECT CONTEXT\nThis specific prospect has been researched. Use this intelligence to personalize all 3 email variations:\n\n${params.prospectContext}\n\nIMPORTANT: Each variation's opening line must reference something specific from the prospect context above — a recent news item, a known challenge, or a personalization hook. Do not open with a generic line. The email should feel like it was written by someone who actually looked this person up.\n`
+    : '';
 
+  return `Generate 3 cold email variations for the following brief:
+${prospectSection}
 Email Type: ${params.emailType}
 What You're Selling/Offering: ${params.offering}
 Target Persona: ${params.targetPersona}
