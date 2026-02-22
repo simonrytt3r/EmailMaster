@@ -27,9 +27,47 @@ const SCORE_COLOR = (score: number) => {
 };
 
 // ─── Touch Card ────────────────────────────────────────────────────────────────
-function TouchCard({ touch, isLast }: { touch: SequenceTouchEmail; isLast: boolean }) {
+function TouchCard({
+  touch,
+  isLast,
+  context,
+}: {
+  touch: SequenceTouchEmail;
+  isLast: boolean;
+  context?: { offering: string; targetPersona: string; industry?: string };
+}) {
+  const [showReplyForm, setShowReplyForm] = useState(false);
+  const [replyNote, setReplyNote] = useState('');
+  const [replied, setReplied] = useState(false);
+  const [logging, setLogging] = useState(false);
   const emailText = `Subject: ${touch.subject}\n\n${touch.body}`;
   const badgeClass = TOUCH_COLORS[touch.touchNumber] ?? 'bg-ios-text-2 text-white';
+
+  const handleLogReply = async () => {
+    setLogging(true);
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'sequence',
+          label: `Touch ${touch.touchNumber} — ${touch.label}`,
+          touchNumber: touch.touchNumber,
+          subject: touch.subject,
+          body: touch.body,
+          score: touch.overallScore,
+          offering: context?.offering ?? '',
+          targetPersona: context?.targetPersona ?? '',
+          industry: context?.industry,
+          note: replyNote.trim() || undefined,
+        }),
+      });
+    } finally {
+      setReplied(true);
+      setShowReplyForm(false);
+      setLogging(false);
+    }
+  };
 
   return (
     <div className="flex gap-4">
@@ -93,9 +131,49 @@ function TouchCard({ touch, isLast }: { touch: SequenceTouchEmail; isLast: boole
             </div>
 
             {/* Actions */}
-            <div className="flex items-center gap-2 pt-1">
+            <div className="flex items-center gap-2 pt-1 flex-wrap">
               <CopyButton text={emailText} label="Copy touch" />
+              {!replied ? (
+                <button
+                  onClick={() => setShowReplyForm(!showReplyForm)}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-ios-green/10 text-ios-green hover:bg-ios-green/15 transition-colors duration-150"
+                >
+                  Got a reply
+                </button>
+              ) : (
+                <span className="text-[13px] font-medium text-ios-green">✓ Logged</span>
+              )}
             </div>
+
+            {/* Reply form */}
+            {showReplyForm && !replied && (
+              <div className="pt-3 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 space-y-2">
+                <p className="text-[12px] text-ios-text-2">Log this reply to improve future generations.</p>
+                <input
+                  type="text"
+                  value={replyNote}
+                  onChange={(e) => setReplyNote(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && !logging && handleLogReply()}
+                  placeholder="Optional: booked demo, said not now, gave referral..."
+                  className="w-full px-3 py-2 text-[13px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-green/30"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleLogReply}
+                    disabled={logging}
+                    className="px-4 py-1.5 rounded-full text-[13px] font-medium bg-ios-green text-white hover:bg-ios-green/90 disabled:opacity-40 transition-colors"
+                  >
+                    {logging ? 'Logging...' : 'Log it'}
+                  </button>
+                  <button
+                    onClick={() => setShowReplyForm(false)}
+                    className="px-4 py-1.5 rounded-full text-[13px] font-medium text-ios-text-2 hover:text-ios-text dark:hover:text-white transition-colors"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -411,6 +489,7 @@ export default function SequencePage() {
                   key={touch.touchNumber}
                   touch={touch}
                   isLast={i === result.touches.length - 1}
+                  context={{ offering, targetPersona, industry: industry || undefined }}
                 />
               ))}
             </div>

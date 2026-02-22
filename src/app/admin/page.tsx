@@ -52,6 +52,29 @@ interface UpdatedBestPractice {
   source: string;
 }
 
+interface ReplyEntry {
+  id: number;
+  date: string;
+  source: 'generate' | 'sequence';
+  label: string;
+  touchNumber?: number;
+  subject: string;
+  body: string;
+  score?: number;
+  offering: string;
+  targetPersona: string;
+  industry?: string;
+  emailType?: string;
+  note?: string;
+}
+
+interface ExtractState {
+  status: 'idle' | 'extracting' | 'done' | 'error';
+  pattern?: UpdatedBestPractice;
+  error?: string;
+  applyKey?: string;
+}
+
 interface FetchedUpdates {
   benchmarkUpdates: BenchmarkUpdate[];
   deliverabilityChanges: DeliverabilityChange[];
@@ -203,6 +226,13 @@ function AdminDashboard({ password }: { password: string }) {
   const [kbOpen, setKbOpen] = useState(false);
   const [tocOpen, setTocOpen] = useState(true);
   const [logOpen, setLogOpen] = useState(true);
+  const [repliesOpen, setRepliesOpen] = useState(true);
+
+  const [replies, setReplies] = useState<ReplyEntry[]>([]);
+  const [repliesLoading, setRepliesLoading] = useState(false);
+  const [repliesError, setRepliesError] = useState('');
+  const [expandedReply, setExpandedReply] = useState<number | null>(null);
+  const [extractStates, setExtractStates] = useState<Record<number, ExtractState>>({});
 
   const [fetching, setFetching] = useState(false);
   const [fetchError, setFetchError] = useState('');
@@ -234,8 +264,60 @@ function AdminDashboard({ password }: { password: string }) {
     }
   }
 
+  async function loadReplies() {
+    setRepliesLoading(true);
+    setRepliesError('');
+    try {
+      const res = await fetch('/api/admin/replies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setReplies(json.replies ?? []);
+      } else {
+        setRepliesError(json.error || 'Failed to load replies.');
+      }
+    } catch {
+      setRepliesError('Network error loading replies.');
+    } finally {
+      setRepliesLoading(false);
+    }
+  }
+
+  async function handleExtractPattern(reply: ReplyEntry) {
+    setExtractStates((prev) => ({ ...prev, [reply.id]: { status: 'extracting' } }));
+    try {
+      const res = await fetch('/api/admin/extract-pattern', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, reply }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        const applyKey = `reply-pattern-${reply.id}`;
+        setExtractStates((prev) => ({
+          ...prev,
+          [reply.id]: { status: 'done', pattern: json.pattern, applyKey },
+        }));
+      } else {
+        setExtractStates((prev) => ({
+          ...prev,
+          [reply.id]: { status: 'error', error: json.error || 'Failed to extract pattern.' },
+        }));
+      }
+    } catch {
+      setExtractStates((prev) => ({
+        ...prev,
+        [reply.id]: { status: 'error', error: 'Network error extracting pattern.' },
+      }));
+    }
+  }
+
   useEffect(() => {
     loadData();
+    loadReplies();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -331,7 +413,7 @@ function AdminDashboard({ password }: { password: string }) {
         {data && (
           <>
             {/* Stats bar */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-4 gap-4">
               <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
                 <div className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
                   {data.totalWords.toLocaleString()}
@@ -349,6 +431,12 @@ function AdminDashboard({ password }: { password: string }) {
                   {data.updateLog.length}
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Updates applied</div>
+              </div>
+              <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 p-4">
+                <div className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                  {replies.length}
+                </div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Replies logged</div>
               </div>
             </div>
 
@@ -631,6 +719,136 @@ function AdminDashboard({ password }: { password: string }) {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Reply Feedback */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <button
+                onClick={() => setRepliesOpen((v) => !v)}
+                className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <div>
+                  <h2 className="font-semibold">Reply Feedback</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Emails marked &ldquo;Got a reply&rdquo; by users. Extract patterns to improve the knowledge base.
+                  </p>
+                </div>
+                <span className="text-gray-400 text-sm shrink-0 ml-4">{repliesOpen ? '▲' : '▼'}</span>
+              </button>
+              {repliesOpen && (
+                <div className="border-t border-gray-200 dark:border-gray-800 px-6 py-4">
+                  {repliesLoading && (
+                    <p className="text-sm text-gray-400 py-4 text-center">Loading replies…</p>
+                  )}
+                  {repliesError && (
+                    <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-3">{repliesError}</p>
+                  )}
+                  {!repliesLoading && !repliesError && replies.length === 0 && (
+                    <p className="text-sm text-gray-400 dark:text-gray-500 py-4 text-center">
+                      No replies logged yet. Use the &ldquo;Got a reply&rdquo; button on generated emails.
+                    </p>
+                  )}
+                  {replies.length > 0 && (
+                    <div className="space-y-4">
+                      {replies.map((reply) => {
+                        const extract = extractStates[reply.id];
+                        const patternKey = `reply-pattern-${reply.id}`;
+                        const isExpanded = expandedReply === reply.id;
+                        return (
+                          <div
+                            key={reply.id}
+                            className="border border-gray-200 dark:border-gray-700 rounded-xl overflow-hidden"
+                          >
+                            {/* Reply header */}
+                            <div className="px-4 py-3 bg-gray-50 dark:bg-gray-800 flex items-start justify-between gap-3">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="text-xs font-semibold text-green-600 dark:text-green-400 uppercase tracking-wide">
+                                    {reply.source === 'sequence'
+                                      ? `Sequence · ${reply.label}`
+                                      : reply.label}
+                                  </span>
+                                  <span className="text-xs text-gray-400">{reply.date}</span>
+                                  {reply.score !== undefined && (
+                                    <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-2 py-0.5 rounded-full">
+                                      Score {reply.score}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-sm font-medium text-gray-800 dark:text-gray-200 mt-1 truncate">
+                                  Subject: {reply.subject}
+                                </p>
+                                {reply.offering && (
+                                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5 truncate">
+                                    {reply.offering} → {reply.targetPersona}
+                                  </p>
+                                )}
+                                {reply.note && (
+                                  <p className="text-xs italic text-gray-500 dark:text-gray-400 mt-0.5">
+                                    &ldquo;{reply.note}&rdquo;
+                                  </p>
+                                )}
+                              </div>
+                              <button
+                                onClick={() => setExpandedReply(isExpanded ? null : reply.id)}
+                                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 shrink-0"
+                              >
+                                {isExpanded ? 'Hide' : 'Show email'}
+                              </button>
+                            </div>
+
+                            {/* Email body (expandable) */}
+                            {isExpanded && (
+                              <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+                                <pre className="text-xs text-gray-700 dark:text-gray-300 whitespace-pre-wrap font-mono leading-relaxed max-h-48 overflow-y-auto">
+                                  {reply.body}
+                                </pre>
+                              </div>
+                            )}
+
+                            {/* Extract pattern section */}
+                            <div className="px-4 py-3 border-t border-gray-200 dark:border-gray-700">
+                              {!extract || extract.status === 'idle' ? (
+                                <button
+                                  onClick={() => handleExtractPattern(reply)}
+                                  className="px-4 py-2 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium transition-colors"
+                                >
+                                  Extract Pattern → KB
+                                </button>
+                              ) : extract.status === 'extracting' ? (
+                                <p className="text-sm text-gray-500 italic">Analyzing with Claude…</p>
+                              ) : extract.status === 'error' ? (
+                                <p className="text-sm text-red-500">{extract.error}</p>
+                              ) : extract.status === 'done' && extract.pattern ? (
+                                <div className="space-y-3">
+                                  <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                                    Extracted Pattern
+                                  </h4>
+                                  <UpdateCard
+                                    title={extract.pattern.practice}
+                                    fields={[
+                                      { label: 'Old advice', value: extract.pattern.oldAdvice },
+                                      { label: 'New advice', value: extract.pattern.newAdvice },
+                                      { label: 'Source', value: extract.pattern.source },
+                                    ]}
+                                    onApply={() =>
+                                      handleApply('updatedBestPractice', extract.pattern!, patternKey)
+                                    }
+                                    onSkip={() => handleSkip(patternKey)}
+                                    applying={itemStates[patternKey] === 'applying'}
+                                    applied={itemStates[patternKey] === 'applied'}
+                                    skipped={itemStates[patternKey] === 'skipped'}
+                                  />
+                                </div>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

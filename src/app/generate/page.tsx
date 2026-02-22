@@ -23,11 +23,42 @@ const labelClass = 'block text-[12px] font-medium text-ios-text-2 uppercase trac
 interface VariationCardProps {
   variation: EmailVariation;
   onRefine: (email: string, label: string) => void;
+  context?: { offering: string; targetPersona: string; industry?: string; emailType?: string };
 }
 
-function VariationCard({ variation, onRefine }: VariationCardProps) {
+function VariationCard({ variation, onRefine, context }: VariationCardProps) {
   const [showScorecard, setShowScorecard] = useState(false);
+  const [showReplyForm, setShowReplyForm] = useState(false);
+  const [replyNote, setReplyNote] = useState('');
+  const [replied, setReplied] = useState(false);
+  const [logging, setLogging] = useState(false);
   const emailText = `Subject: ${variation.subject}\n\n${variation.body}`;
+
+  const handleLogReply = async () => {
+    setLogging(true);
+    try {
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source: 'generate',
+          label: variation.label,
+          subject: variation.subject,
+          body: variation.body,
+          score: variation.scores?.overallScore,
+          offering: context?.offering ?? '',
+          targetPersona: context?.targetPersona ?? '',
+          industry: context?.industry,
+          emailType: context?.emailType,
+          note: replyNote.trim() || undefined,
+        }),
+      });
+    } finally {
+      setReplied(true);
+      setShowReplyForm(false);
+      setLogging(false);
+    }
+  };
 
   return (
     <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden ios-card-hover flex flex-col">
@@ -59,7 +90,7 @@ function VariationCard({ variation, onRefine }: VariationCardProps) {
       </div>
 
       {/* Action row */}
-      <div className="px-4 pb-4 flex items-center gap-2 flex-wrap">
+      <div className="px-4 pb-3 flex items-center gap-2 flex-wrap">
         <CopyButton text={emailText} label="Copy" />
         <button
           onClick={() => setShowScorecard(!showScorecard)}
@@ -73,7 +104,47 @@ function VariationCard({ variation, onRefine }: VariationCardProps) {
         >
           Refine
         </button>
+        {!replied ? (
+          <button
+            onClick={() => setShowReplyForm(!showReplyForm)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-ios-green/10 text-ios-green hover:bg-ios-green/15 transition-colors duration-150"
+          >
+            Got a reply
+          </button>
+        ) : (
+          <span className="text-[13px] font-medium text-ios-green">✓ Logged</span>
+        )}
       </div>
+
+      {/* Reply form */}
+      {showReplyForm && !replied && (
+        <div className="px-4 pb-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 pt-3 space-y-2">
+          <p className="text-[12px] text-ios-text-2">Log this reply to improve future generations.</p>
+          <input
+            type="text"
+            value={replyNote}
+            onChange={(e) => setReplyNote(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !logging && handleLogReply()}
+            placeholder="Optional: booked demo, said not now, gave referral..."
+            className="w-full px-3 py-2 text-[13px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-green/30"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleLogReply}
+              disabled={logging}
+              className="px-4 py-1.5 rounded-full text-[13px] font-medium bg-ios-green text-white hover:bg-ios-green/90 disabled:opacity-40 transition-colors"
+            >
+              {logging ? 'Logging...' : 'Log it'}
+            </button>
+            <button
+              onClick={() => setShowReplyForm(false)}
+              className="px-4 py-1.5 rounded-full text-[13px] font-medium text-ios-text-2 hover:text-ios-text dark:hover:text-white transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Scorecard */}
       {showScorecard && variation.scores && (
@@ -553,6 +624,7 @@ export default function GeneratePage() {
                 key={variation.label}
                 variation={variation}
                 onRefine={(e, l) => setRefineModal({ email: e, label: l })}
+                context={{ offering, targetPersona, industry, emailType }}
               />
             ))}
           </div>
