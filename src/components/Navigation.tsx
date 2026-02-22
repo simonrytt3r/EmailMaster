@@ -7,6 +7,7 @@ import ThemeToggle from './ThemeToggle';
 const tabs = [
   { href: '/analyze', label: 'Analyze' },
   { href: '/generate', label: 'Generate' },
+  { href: '/sequence', label: 'Sequence' },
   { href: '/subject-lines', label: 'Subjects' },
 ];
 

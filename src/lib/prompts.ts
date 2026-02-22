@@ -230,6 +230,94 @@ Return as valid JSON:
 Return ONLY the JSON object. No markdown, no explanatory text. Apply all subject line best practices from your expertise.`;
 }
 
+export function buildSequencePrompt(params: {
+  offering: string;
+  targetPersona: string;
+  sequenceLength: 3 | 5;
+  industry?: string;
+  painPoints?: string;
+  differentiator?: string;
+  tone?: string;
+  mustInclude?: string;
+  prospectContext?: string;
+}): string {
+  const is5Touch = params.sequenceLength === 5;
+
+  const touches = is5Touch
+    ? [
+        { num: 1, day: 0,  label: 'The Hook',    strategy: 'Earn attention. Short, relevant, pattern interrupt. Low-friction yes/no ask. Do NOT pitch. Make them curious or surface a pain they recognize.' },
+        { num: 2, day: 3,  label: 'The Angle',   strategy: 'New angle — different proof point or specific data. Do NOT repeat Touch 1. Reference a result or case study. Slightly more concrete CTA.' },
+        { num: 3, day: 10, label: 'The Direct',  strategy: 'Name the problem explicitly. No softening. Assume they have the pain — speak to it directly. Offer a clear value exchange. Most direct email in the sequence.' },
+        { num: 4, day: 17, label: 'The Re-Frame', strategy: 'Come in from a completely different direction: new pain angle, different stakeholder framing, or an unexpected insight. Avoid all language from previous touches.' },
+        { num: 5, day: 24, label: 'The Breakup',  strategy: 'Soft close. Short, human, low-pressure. Acknowledge the silence. Give them an easy exit. No pitch — just acknowledge and leave the door open.' },
+      ]
+    : [
+        { num: 1, day: 0,  label: 'The Hook',    strategy: 'Earn attention. Short, relevant, pattern interrupt. Low-friction yes/no ask. Do NOT pitch. Make them curious or surface a pain they recognize.' },
+        { num: 2, day: 3,  label: 'The Angle',   strategy: 'New angle — different proof point or specific data. Do NOT repeat Touch 1. Reference a result or case study. Slightly more concrete CTA.' },
+        { num: 3, day: 10, label: 'The Breakup',  strategy: 'Soft close. Short, human, low-pressure. Acknowledge the silence. Brief reminder of value, then give them a clear easy exit.' },
+      ];
+
+  const optionalFields = [
+    params.industry     && `Industry/Vertical: ${params.industry}`,
+    params.painPoints   && `Known Pain Points: ${params.painPoints}`,
+    params.differentiator && `Key Differentiator/Proof Point: ${params.differentiator}`,
+    params.tone         && `Tone Preference: ${params.tone}`,
+    params.mustInclude  && `Must Include: ${params.mustInclude}`,
+  ].filter(Boolean).join('\n');
+
+  const prospectSection = params.prospectContext
+    ? `\n## PROSPECT CONTEXT\nResearch on this specific prospect — use it to personalise Touch 1 and where natural across the sequence:\n\n${params.prospectContext}\n`
+    : '';
+
+  const touchInstructions = touches
+    .map(t => `**Touch ${t.num} — "${t.label}" (Day ${t.day}):** ${t.strategy}`)
+    .join('\n');
+
+  const touchSchema = touches
+    .map(t => `    {
+      "touchNumber": ${t.num},
+      "label": "${t.label}",
+      "sendDay": ${t.day},
+      "strategy": "<one sentence — what this touch achieves>",
+      "subject": "<subject line>",
+      "body": "<email body>",
+      "overallScore": <number 0-100>,
+      "keyStrength": "<one sentence>",
+      "keyImprovement": "<one sentence>"
+    }`)
+    .join(',\n');
+
+  return `Generate a ${params.sequenceLength}-touch cold email sequence for the following brief:
+${prospectSection}
+What You're Selling/Offering: ${params.offering}
+Target Persona: ${params.targetPersona}
+${optionalFields}
+
+## SEQUENCE STRATEGY
+
+Each touch must be distinct — different angle, different proof point, different language. Never repeat phrases or ideas from a previous touch. Read the whole sequence as a unit before finalising.
+
+${touchInstructions}
+
+## RULES
+- Touch 1: ≤75 words. No pitch. One low-friction question.
+- Touch 2: ≤100 words. New angle only. One concrete proof point.
+- Touch 3 (5-touch) / Breakup (3-touch): if breakup, ≤60 words.
+- All emails: no "Additionally", "Furthermore", "I hope this finds you well", "I wanted to reach out". No bullets in body. No hedging language. Read-aloud test must pass.
+- Subject lines: 1–6 words, lowercase or sentence case, no spam words.
+- Each email must score ≥78 on the rubric.
+
+Return your response as valid JSON:
+
+{
+  "touches": [
+${touchSchema}
+  ]
+}
+
+Return ONLY the JSON object. No markdown code blocks. No explanatory text.`;
+}
+
 export function buildRefinementPrompt(email: string, instructions: string): string {
   return `Here is an email draft:
 

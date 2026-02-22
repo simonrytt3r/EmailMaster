@@ -118,3 +118,33 @@ export interface ResearchRequest {
   linkedinUrl?: string;
   websiteUrl?: string;
 }
+
+// ─── Sequence Builder ──────────────────────────────────────────────────────────
+
+export interface SequenceTouchEmail {
+  touchNumber: number;
+  label: string;
+  sendDay: number;
+  strategy: string;
+  subject: string;
+  body: string;
+  overallScore: number;
+  keyStrength: string;
+  keyImprovement: string;
+}
+
+export interface SequenceRequest {
+  offering: string;
+  targetPersona: string;
+  sequenceLength: 3 | 5;
+  industry?: string;
+  painPoints?: string;
+  differentiator?: string;
+  tone?: string;
+  mustInclude?: string;
+  prospectContext?: string;
+}
+
+export interface SequenceResult {
+  touches: SequenceTouchEmail[];
+}
