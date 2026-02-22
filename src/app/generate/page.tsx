@@ -32,12 +32,14 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
   const [replyNote, setReplyNote] = useState('');
   const [replied, setReplied] = useState(false);
   const [logging, setLogging] = useState(false);
+  const [replyError, setReplyError] = useState(false);
   const emailText = `Subject: ${variation.subject}\n\n${variation.body}`;
 
   const handleLogReply = async () => {
     setLogging(true);
+    setReplyError(false);
     try {
-      await fetch('/api/feedback', {
+      const res = await fetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -53,9 +55,12 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
           note: replyNote.trim() || undefined,
         }),
       });
-    } finally {
+      if (!res.ok) throw new Error('server error');
       setReplied(true);
       setShowReplyForm(false);
+    } catch {
+      setReplyError(true);
+    } finally {
       setLogging(false);
     }
   };
@@ -128,16 +133,19 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
             placeholder="Optional: booked demo, said not now, gave referral..."
             className="w-full px-3 py-2 text-[13px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-green/30"
           />
+          {replyError && (
+            <p className="text-[12px] text-ios-red">Failed to log — check your connection and try again.</p>
+          )}
           <div className="flex gap-2">
             <button
               onClick={handleLogReply}
               disabled={logging}
               className="px-4 py-1.5 rounded-full text-[13px] font-medium bg-ios-green text-white hover:bg-ios-green/90 disabled:opacity-40 transition-colors"
             >
-              {logging ? 'Logging...' : 'Log it'}
+              {logging ? 'Logging...' : replyError ? 'Try again' : 'Log it'}
             </button>
             <button
-              onClick={() => setShowReplyForm(false)}
+              onClick={() => { setShowReplyForm(false); setReplyError(false); }}
               className="px-4 py-1.5 rounded-full text-[13px] font-medium text-ios-text-2 hover:text-ios-text dark:hover:text-white transition-colors"
             >
               Cancel

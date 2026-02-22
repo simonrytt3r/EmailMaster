@@ -822,7 +822,15 @@ function AdminDashboard({ password }: { password: string }) {
                               ) : extract.status === 'extracting' ? (
                                 <p className="text-sm text-gray-500 italic">Analyzing with Claude…</p>
                               ) : extract.status === 'error' ? (
-                                <p className="text-sm text-red-500">{extract.error}</p>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <p className="text-sm text-red-500">{extract.error}</p>
+                                  <button
+                                    onClick={() => handleExtractPattern(reply)}
+                                    className="px-3 py-1.5 rounded-lg border border-red-300 dark:border-red-700 text-red-500 text-sm hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
+                                  >
+                                    Retry
+                                  </button>
+                                </div>
                               ) : extract.status === 'done' && extract.pattern ? (
                                 <div className="space-y-3">
                                   <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">

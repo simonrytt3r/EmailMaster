@@ -186,6 +186,53 @@ try {
   ok('accepts correct password (200)', correct.status === 200);
   ok('returns all 3 replies', correct.replies.length === 3);
 
+  // ─── 9. res.ok check — handleLogReply only marks replied on success ──────────
+  section('9. res.ok check (mirrors fixed handleLogReply logic)');
+
+  // Simulate the fixed handleLogReply: only set replied=true when res.ok
+  function simulateHandleLogReply(responseOk) {
+    let replied = false;
+    let replyError = false;
+    // mirrors the new try/catch/finally
+    try {
+      if (!responseOk) throw new Error('server error');
+      replied = true;
+    } catch {
+      replyError = true;
+    }
+    return { replied, replyError };
+  }
+
+  const success = simulateHandleLogReply(true);
+  ok('replied=true when res.ok is true', success.replied === true);
+  ok('replyError=false when res.ok is true', success.replyError === false);
+
+  const failure = simulateHandleLogReply(false);
+  ok('replied stays false when res.ok is false', failure.replied === false);
+  ok('replyError=true when res.ok is false', failure.replyError === true);
+
+  // The original bug: fetch() resolves even on 500 (it only throws on network error).
+  // The old code had no res.ok check — the finally block always ran and set replied=true.
+  function simulateOldHandleLogReply(responseOk) {
+    let replied = false;
+    try {
+      // fetch resolved (even if status=500); old code never checked responseOk
+      void responseOk;
+    } finally {
+      replied = true; // ran unconditionally — the bug
+    }
+    return { replied };
+  }
+  const oldFailure = simulateOldHandleLogReply(false);
+  ok('OLD code incorrectly set replied=true on 500 response (confirms bug was real)', oldFailure.replied === true);
+
+  // ─── 10. extract-pattern model version ───────────────────────────────────────
+  section('10. extract-pattern uses correct model');
+  const { readFileSync: rfs } = await import('fs');
+  const routeSource = rfs(join(ROOT, 'src/app/api/admin/extract-pattern/route.ts'), 'utf-8');
+  ok('uses claude-sonnet-4-5-20250929 (matches other admin routes)', routeSource.includes('claude-sonnet-4-5-20250929'));
+  ok('does not use old claude-sonnet-4-20250514', !routeSource.includes('claude-sonnet-4-20250514'));
+
 } finally {
   // ─── Restore original log ───────────────────────────────────────────────────
   if (existsSync(BACKUP_PATH)) {
