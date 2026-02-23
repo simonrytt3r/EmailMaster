@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react';
 import CopyButton from '@/components/CopyButton';
 import LoadingState from '@/components/LoadingState';
+import MobilePreview from '@/components/MobilePreview';
 import { SequenceRequest, SequenceResult, SequenceTouchEmail } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
@@ -36,6 +37,7 @@ function TouchCard({
   isLast: boolean;
   context?: { offering: string; targetPersona: string; industry?: string };
 }) {
+  const [showPreview, setShowPreview] = useState(false);
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyNote, setReplyNote] = useState('');
   const [replied, setReplied] = useState(false);
@@ -138,6 +140,16 @@ function TouchCard({
             {/* Actions */}
             <div className="flex items-center gap-2 pt-1 flex-wrap">
               <CopyButton text={emailText} label="Copy touch" />
+              <button
+                onClick={() => setShowPreview(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-ios-secondary dark:bg-ios-dark-secondary text-ios-text-2 hover:text-ios-text dark:hover:text-white transition-colors duration-150"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.5c-4.5 0-8-4-8-6.5s3.5-6.5 8-6.5 8 4 8 6.5-3.5 6.5-8 6.5z" />
+                  <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+                </svg>
+                Preview
+              </button>
               {!replied ? (
                 <button
                   onClick={() => setShowReplyForm(!showReplyForm)}
@@ -185,6 +197,15 @@ function TouchCard({
           </div>
         </div>
       </div>
+
+      {/* Mobile preview modal */}
+      {showPreview && (
+        <MobilePreview
+          subject={touch.subject}
+          body={touch.body}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   );
 }

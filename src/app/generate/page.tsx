@@ -5,6 +5,7 @@ import ScoreCard from '@/components/ScoreCard';
 import LoadingState from '@/components/LoadingState';
 import CopyButton from '@/components/CopyButton';
 import ProspectResearch from '@/components/ProspectResearch';
+import MobilePreview from '@/components/MobilePreview';
 import { GenerateResult, EmailVariation, AnalysisResult, ResearchResult, ResearchInputs } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
@@ -28,6 +29,7 @@ interface VariationCardProps {
 
 function VariationCard({ variation, onRefine, context }: VariationCardProps) {
   const [showScorecard, setShowScorecard] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [showReplyForm, setShowReplyForm] = useState(false);
   const [replyNote, setReplyNote] = useState('');
   const [replied, setReplied] = useState(false);
@@ -104,6 +106,16 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
           {showScorecard ? 'Hide Scores' : 'View Scores'}
         </button>
         <button
+          onClick={() => setShowPreview(true)}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-ios-secondary dark:bg-ios-dark-secondary text-ios-text-2 hover:text-ios-text dark:hover:text-white transition-colors duration-150"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.5c-4.5 0-8-4-8-6.5s3.5-6.5 8-6.5 8 4 8 6.5-3.5 6.5-8 6.5z" />
+            <circle cx="12" cy="12" r="2" fill="currentColor" stroke="none" />
+          </svg>
+          Preview
+        </button>
+        <button
           onClick={() => onRefine(emailText, variation.label)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-ios-blue/10 text-ios-blue hover:bg-ios-blue/15 transition-colors duration-150"
         >
@@ -159,6 +171,15 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
         <div className="px-4 pb-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 pt-4">
           <ScoreCard result={variation.scores} compact={false} />
         </div>
+      )}
+
+      {/* Mobile preview modal */}
+      {showPreview && (
+        <MobilePreview
+          subject={variation.subject}
+          body={variation.body}
+          onClose={() => setShowPreview(false)}
+        />
       )}
     </div>
   );
