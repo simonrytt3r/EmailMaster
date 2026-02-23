@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import CopyButton from '@/components/CopyButton';
 import LoadingState from '@/components/LoadingState';
 import MobilePreview from '@/components/MobilePreview';
-import { SequenceRequest, SequenceResult, SequenceTouchEmail } from '@/lib/types';
+import ProspectResearch from '@/components/ProspectResearch';
+import { SequenceRequest, SequenceResult, SequenceTouchEmail, ResearchResult, ResearchInputs } from '@/lib/types';
 
 const COOLDOWN_MS = 5000;
 
@@ -26,6 +27,47 @@ const SCORE_COLOR = (score: number) => {
   if (score >= 65) return 'text-ios-yellow';
   return 'text-ios-red';
 };
+
+// ─── Prospect Context Builder ──────────────────────────────────────────────────
+function buildProspectContext(
+  result: ResearchResult,
+  hooks: string[],
+  inputs: ResearchInputs | null
+): string {
+  const lines: string[] = [];
+
+  const companyName = inputs?.company || 'the company';
+  lines.push(`Company: ${companyName}`);
+  if (result.organization.summary) lines.push(`Summary: ${result.organization.summary}`);
+  if (result.organization.size) lines.push(`Size: ${result.organization.size}`);
+  if (result.organization.sports?.length > 0) lines.push(`Sports/Facilities: ${result.organization.sports.join(', ')}`);
+  if (result.organization.recentNews?.length > 0) lines.push(`Recent news: ${result.organization.recentNews.slice(0, 3).join('; ')}`);
+  if (result.organization.challenges?.length > 0) lines.push(`Known challenges: ${result.organization.challenges.slice(0, 3).join('; ')}`);
+  if (result.organization.keyFacts?.length > 0) lines.push(`Key facts: ${result.organization.keyFacts.slice(0, 3).join('; ')}`);
+
+  if (inputs?.personName || result.person.role || result.person.summary) {
+    lines.push('');
+    if (inputs?.personName && result.person.role) {
+      lines.push(`Person: ${inputs.personName} — ${result.person.role}`);
+    } else if (inputs?.personName) {
+      lines.push(`Person: ${inputs.personName}`);
+    } else if (result.person.role) {
+      lines.push(`Role: ${result.person.role}`);
+    }
+    if (result.person.tenure) lines.push(`Tenure: ${result.person.tenure}`);
+    if (result.person.summary) lines.push(`Background: ${result.person.summary}`);
+    if (result.person.recentActivity?.length > 0) lines.push(`Recent activity: ${result.person.recentActivity.slice(0, 2).join('; ')}`);
+    if (result.person.notableItems?.length > 0) lines.push(`Notable: ${result.person.notableItems.slice(0, 2).join('; ')}`);
+  }
+
+  if (hooks.length > 0) {
+    lines.push('');
+    lines.push('Personalization hooks (use 1-2 naturally across the sequence — pick the strongest fit for each touch):');
+    hooks.forEach((h) => lines.push(`• ${h}`));
+  }
+
+  return lines.join('\n');
+}
 
 // ─── Touch Card ────────────────────────────────────────────────────────────────
 function TouchCard({
@@ -92,7 +134,6 @@ function TouchCard({
 
       {/* Card */}
       <div className="flex-1 pb-6">
-        {/* Card header */}
         <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden ios-card-hover">
           <div className="px-4 py-3 border-b border-ios-sep/20 dark:border-ios-dark-sep/60 bg-ios-bg dark:bg-ios-dark-secondary flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
@@ -222,6 +263,35 @@ export default function SequencePage() {
   const [mustInclude, setMustInclude] = useState('');
   const [showOptional, setShowOptional] = useState(false);
 
+  // Research state
+  const [researchResult, setResearchResult] = useState<ResearchResult | null>(null);
+  const [selectedHooks, setSelectedHooks] = useState<string[]>([]);
+  const [researchInputs, setResearchInputs] = useState<ResearchInputs | null>(null);
+
+  const handleResearchChange = useCallback(
+    (research: ResearchResult | null, hooks: string[], inputs?: ResearchInputs) => {
+      setResearchResult(research);
+      setSelectedHooks(hooks);
+      setResearchInputs(inputs ?? null);
+    },
+    []
+  );
+
+  // Auto-fill empty form fields from research data
+  useEffect(() => {
+    if (!researchResult || !researchInputs) return;
+    if (researchResult.person.role) {
+      setTargetPersona((prev) => (prev.trim() ? prev : researchResult.person.role));
+    }
+    if (researchResult.organization.sports?.length > 0) {
+      setIndustry((prev) => (prev.trim() ? prev : researchResult.organization.sports.slice(0, 2).join(', ')));
+    }
+    if (researchResult.organization.challenges?.length > 0) {
+      setPainPoints((prev) => (prev.trim() ? prev : researchResult.organization.challenges.slice(0, 3).join('; ')));
+      setShowOptional(true);
+    }
+  }, [researchResult, researchInputs]);
+
   const [loading, setLoading] = useState(false);
   const [streamText, setStreamText] = useState('');
   const [result, setResult] = useState<SequenceResult | null>(null);
@@ -247,6 +317,10 @@ export default function SequencePage() {
     setResult(null);
     setStreamText('');
 
+    const prospectContext = researchResult
+      ? buildProspectContext(researchResult, selectedHooks, researchInputs)
+      : undefined;
+
     const body: SequenceRequest = {
       offering: offering.trim(),
       targetPersona: targetPersona.trim(),
@@ -256,6 +330,7 @@ export default function SequencePage() {
       differentiator: differentiator.trim() || undefined,
       tone: tone || undefined,
       mustInclude: mustInclude.trim() || undefined,
+      prospectContext,
     };
 
     try {
@@ -322,153 +397,184 @@ export default function SequencePage() {
           </p>
         </div>
 
-        {/* Form card */}
-        <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios p-5 space-y-5">
+        {/* Step 1: Research (optional) */}
+        <ProspectResearch onResearchChange={handleResearchChange} />
 
-          {/* Sequence length selector */}
-          <div>
-            <label className={labelClass}>Sequence Length</label>
-            <div className="flex items-center bg-ios-secondary dark:bg-ios-dark-secondary rounded-[9px] p-[3px] gap-[2px] w-fit">
-              {([3, 5] as const).map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setSequenceLength(n)}
-                  className={`px-4 py-[6px] rounded-[7px] text-[13px] font-medium whitespace-nowrap transition-all duration-150 ease-out select-none ${
-                    sequenceLength === n
-                      ? 'bg-white dark:bg-ios-dark-card text-ios-text dark:text-white shadow-ios-seg'
-                      : 'text-ios-text-2 hover:text-ios-text dark:hover:text-white'
-                  }`}
-                >
-                  {n}-Touch
-                </button>
-              ))}
-            </div>
-            <p className="text-[12px] text-ios-text-2 mt-1.5">
-              {sequenceLength === 5
-                ? 'Days 0, 3, 10, 17, 24 — captures 93% of replies (3-7-7 cadence)'
-                : 'Days 0, 3, 10 — lean sequence for warm lists or faster cycles'}
-            </p>
-          </div>
+        {/* Step 2: Form card */}
+        <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
 
-          {/* Required fields */}
-          <div className="space-y-4">
-            <div>
-              <label className={labelClass}>What You&rsquo;re Selling / Offering *</label>
-              <input
-                type="text"
-                value={offering}
-                onChange={(e) => setOffering(e.target.value)}
-                placeholder="e.g., GPS-guided field marking robots for sports facilities"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Target Persona *</label>
-              <input
-                type="text"
-                value={targetPersona}
-                onChange={(e) => setTargetPersona(e.target.value)}
-                placeholder="e.g., Directors of Operations at multi-field sports complexes"
-                className={inputClass}
-              />
-            </div>
-          </div>
-
-          {/* Optional fields toggle */}
-          <div>
-            <button
-              onClick={() => setShowOptional(!showOptional)}
-              className="flex items-center gap-1.5 text-[13px] font-medium text-ios-blue"
-            >
-              <svg
-                className={`w-4 h-4 transition-transform duration-150 ${showOptional ? 'rotate-90' : ''}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-              </svg>
-              {showOptional ? 'Hide' : 'Add'} optional details
-            </button>
-
-            {showOptional && (
-              <div className="mt-4 space-y-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 pt-4">
-                <div>
-                  <label className={labelClass}>Industry / Vertical</label>
-                  <input
-                    type="text"
-                    value={industry}
-                    onChange={(e) => setIndustry(e.target.value)}
-                    placeholder="e.g., Parks & Recreation, Collegiate Athletics"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Known Pain Points</label>
-                  <textarea
-                    value={painPoints}
-                    onChange={(e) => setPainPoints(e.target.value)}
-                    placeholder="e.g., Labor shortage, inconsistent line quality, time-consuming manual marking"
-                    rows={2}
-                    className={`${inputClass} resize-none`}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Key Differentiator / Proof Point</label>
-                  <input
-                    type="text"
-                    value={differentiator}
-                    onChange={(e) => setDifferentiator(e.target.value)}
-                    placeholder="e.g., 30-min field marking vs. 3 hours manually, sub-centimeter precision"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Tone</label>
-                  <select
-                    value={tone}
-                    onChange={(e) => setTone(e.target.value)}
-                    className={inputClass}
-                  >
-                    <option value="">Default (peer-level, direct)</option>
-                    <option value="Casual">Casual</option>
-                    <option value="Professional">Professional</option>
-                    <option value="Bold">Bold</option>
-                    <option value="Consultative">Consultative</option>
-                  </select>
-                </div>
-                <div>
-                  <label className={labelClass}>Must Include</label>
-                  <input
-                    type="text"
-                    value={mustInclude}
-                    onChange={(e) => setMustInclude(e.target.value)}
-                    placeholder="e.g., Mention the free trial, reference competitor X"
-                    className={inputClass}
-                  />
-                </div>
-              </div>
+          {/* Step indicator */}
+          <div className="px-4 pt-3.5 pb-0 flex items-center gap-2.5">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-ios-blue text-white text-[11px] font-bold flex-shrink-0">
+              2
+            </span>
+            <span className="text-[15px] font-medium text-ios-text dark:text-white">
+              Configure Your Sequence
+            </span>
+            {researchResult && (
+              <span className="text-[12px] text-ios-green font-medium ml-auto">
+                Research attached{selectedHooks.length > 0 ? ` · ${selectedHooks.length} hook${selectedHooks.length === 1 ? '' : 's'}` : ''} ✓
+              </span>
             )}
           </div>
 
-          {/* Error */}
-          {error && (
-            <p className="text-[13px] text-ios-red bg-ios-red/10 rounded-ios-sm px-3 py-2">{error}</p>
-          )}
+          <div className="p-4 pt-3 space-y-5">
 
-          {/* Submit */}
-          <button
-            onClick={handleGenerate}
-            disabled={!canSubmit}
-            className="w-full h-[50px] bg-ios-blue disabled:opacity-40 text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97]"
-          >
-            {loading
-              ? `Building ${sequenceLength}-touch sequence...`
-              : onCooldown
-              ? 'Ready in a moment...'
-              : `Build ${sequenceLength}-Touch Sequence`}
-          </button>
+            {/* Sequence length selector */}
+            <div>
+              <label className={labelClass}>Sequence Length</label>
+              <div className="flex items-center bg-ios-secondary dark:bg-ios-dark-secondary rounded-[9px] p-[3px] gap-[2px] w-fit">
+                {([3, 5] as const).map((n) => (
+                  <button
+                    key={n}
+                    onClick={() => setSequenceLength(n)}
+                    className={`px-4 py-[6px] rounded-[7px] text-[13px] font-medium whitespace-nowrap transition-all duration-150 ease-out select-none ${
+                      sequenceLength === n
+                        ? 'bg-white dark:bg-ios-dark-card text-ios-text dark:text-white shadow-ios-seg'
+                        : 'text-ios-text-2 hover:text-ios-text dark:hover:text-white'
+                    }`}
+                  >
+                    {n}-Touch
+                  </button>
+                ))}
+              </div>
+              <p className="text-[12px] text-ios-text-2 mt-1.5">
+                {sequenceLength === 5
+                  ? 'Days 0, 3, 10, 17, 24 — captures 93% of replies (3-7-7 cadence)'
+                  : 'Days 0, 3, 10 — lean sequence for warm lists or faster cycles'}
+              </p>
+            </div>
+
+            {/* Required fields */}
+            <div className="space-y-4">
+              <div>
+                <label className={labelClass}>What You&rsquo;re Selling / Offering *</label>
+                <input
+                  type="text"
+                  value={offering}
+                  onChange={(e) => setOffering(e.target.value)}
+                  placeholder="e.g., GPS-guided field marking robots for sports facilities"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Target Persona *</label>
+                <input
+                  type="text"
+                  value={targetPersona}
+                  onChange={(e) => setTargetPersona(e.target.value)}
+                  placeholder="e.g., Directors of Operations at multi-field sports complexes"
+                  className={inputClass}
+                />
+              </div>
+            </div>
+
+            {/* Optional fields toggle */}
+            <div>
+              <button
+                onClick={() => setShowOptional(!showOptional)}
+                className="flex items-center gap-1.5 text-[13px] font-medium text-ios-blue"
+              >
+                <svg
+                  className={`w-4 h-4 transition-transform duration-150 ${showOptional ? 'rotate-90' : ''}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+                {showOptional ? 'Hide' : 'Add'} optional details
+              </button>
+
+              {showOptional && (
+                <div className="mt-4 space-y-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 pt-4">
+                  <div>
+                    <label className={labelClass}>Industry / Vertical</label>
+                    <input
+                      type="text"
+                      value={industry}
+                      onChange={(e) => setIndustry(e.target.value)}
+                      placeholder="e.g., Parks & Recreation, Collegiate Athletics"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Known Pain Points</label>
+                    <textarea
+                      value={painPoints}
+                      onChange={(e) => setPainPoints(e.target.value)}
+                      placeholder="e.g., Labor shortage, inconsistent line quality, time-consuming manual marking"
+                      rows={2}
+                      className={`${inputClass} resize-none`}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Key Differentiator / Proof Point</label>
+                    <input
+                      type="text"
+                      value={differentiator}
+                      onChange={(e) => setDifferentiator(e.target.value)}
+                      placeholder="e.g., 30-min field marking vs. 3 hours manually, sub-centimeter precision"
+                      className={inputClass}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Tone</label>
+                    <select
+                      value={tone}
+                      onChange={(e) => setTone(e.target.value)}
+                      className={inputClass}
+                    >
+                      <option value="">Default (peer-level, direct)</option>
+                      <option value="Casual">Casual</option>
+                      <option value="Professional">Professional</option>
+                      <option value="Bold">Bold</option>
+                      <option value="Consultative">Consultative</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Must Include</label>
+                    <input
+                      type="text"
+                      value={mustInclude}
+                      onChange={(e) => setMustInclude(e.target.value)}
+                      placeholder="e.g., Mention the free trial, reference competitor X"
+                      className={inputClass}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Error + Submit */}
+          <div className="p-4 border-t border-ios-sep/20 dark:border-ios-dark-sep/60 space-y-3">
+            {error && (
+              <div
+                className="flex items-center gap-2.5 px-4 py-3 rounded-ios-sm text-[14px] text-ios-red"
+                style={{ backgroundColor: 'rgba(255, 59, 48, 0.08)' }}
+              >
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {error}
+              </div>
+            )}
+            <button
+              onClick={handleGenerate}
+              disabled={!canSubmit}
+              className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
+            >
+              {loading
+                ? `Building ${sequenceLength}-touch sequence...`
+                : onCooldown
+                ? 'Ready in a moment...'
+                : researchResult
+                ? `Build Personalised ${sequenceLength}-Touch Sequence`
+                : `Build ${sequenceLength}-Touch Sequence`}
+            </button>
+          </div>
         </div>
 
         {/* Loading */}
@@ -509,6 +615,11 @@ export default function SequencePage() {
                   T{t.touchNumber} Day {t.sendDay}
                 </span>
               ))}
+              {researchResult && researchInputs?.company && (
+                <span className="text-[11px] text-ios-green bg-ios-green/10 px-2 py-0.5 rounded-full font-medium">
+                  Personalised for {researchInputs.personName ? `${researchInputs.personName} @ ` : ''}{researchInputs.company}
+                </span>
+              )}
             </div>
 
             {/* Touch cards timeline */}
