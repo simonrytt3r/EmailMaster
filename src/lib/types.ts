@@ -44,6 +44,8 @@ export interface GenerateRequest {
   offering: string;
   targetPersona: string;
   industry?: string;
+  orgType?: string;
+  prospectState?: string;
   painPoints?: string;
   differentiator?: string;
   desiredCTA?: string;
@@ -138,11 +140,36 @@ export interface SequenceRequest {
   targetPersona: string;
   sequenceLength: 3 | 5;
   industry?: string;
+  orgType?: string;
+  prospectState?: string;
   painPoints?: string;
   differentiator?: string;
   tone?: string;
   mustInclude?: string;
   prospectContext?: string;
+}
+
+// ─── NPS Social Proof ──────────────────────────────────────────────────────────
+
+export interface NpsEntry {
+  id: number;
+  date: string;
+  orgName: string;
+  orgType: string;
+  state: string;
+  npsScore: number;
+  comment: string;
+  contactName?: string;
+  contactTitle?: string;
+}
+
+export interface NpsStore {
+  entries: NpsEntry[];
+}
+
+export interface NpsMatchResult {
+  entries: NpsEntry[];
+  matchType: 'exact' | 'orgType' | 'state' | 'none';
 }
 
 export interface SequenceResult {

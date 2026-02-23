@@ -75,6 +75,18 @@ interface ExtractState {
   applyKey?: string;
 }
 
+interface NpsEntryLocal {
+  id: number;
+  date: string;
+  orgName: string;
+  orgType: string;
+  state: string;
+  npsScore: number;
+  comment: string;
+  contactName?: string;
+  contactTitle?: string;
+}
+
 interface FetchedUpdates {
   benchmarkUpdates: BenchmarkUpdate[];
   deliverabilityChanges: DeliverabilityChange[];
@@ -242,6 +254,16 @@ function AdminDashboard({ password }: { password: string }) {
   // Track state per individual update item: null | 'applying' | 'applied' | 'skipped'
   const [itemStates, setItemStates] = useState<Record<string, string>>({});
 
+  const [npsOpen, setNpsOpen] = useState(true);
+  const [npsEntries, setNpsEntries] = useState<NpsEntryLocal[]>([]);
+  const [npsLoading, setNpsLoading] = useState(false);
+  const [npsError, setNpsError] = useState('');
+  const [npsCsvText, setNpsCsvText] = useState('');
+  const [npsUploading, setNpsUploading] = useState(false);
+  const [npsUploadMode, setNpsUploadMode] = useState<'upload' | 'append'>('append');
+  const [npsUploadError, setNpsUploadError] = useState('');
+  const [npsUploadResult, setNpsUploadResult] = useState<{ count: number; total?: number } | null>(null);
+
   async function loadData() {
     setDataLoading(true);
     setDataError('');
@@ -318,6 +340,7 @@ function AdminDashboard({ password }: { password: string }) {
   useEffect(() => {
     loadData();
     loadReplies();
+    loadNpsEntries();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -371,6 +394,85 @@ function AdminDashboard({ password }: { password: string }) {
 
   function handleSkip(key: string) {
     setItemStates((prev) => ({ ...prev, [key]: 'skipped' }));
+  }
+
+  async function loadNpsEntries() {
+    setNpsLoading(true);
+    setNpsError('');
+    try {
+      const res = await fetch('/api/admin/nps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'read' }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNpsEntries(json.entries ?? []);
+      } else {
+        setNpsError(json.error || 'Failed to load NPS data.');
+      }
+    } catch {
+      setNpsError('Network error loading NPS data.');
+    } finally {
+      setNpsLoading(false);
+    }
+  }
+
+  async function handleNpsUpload() {
+    if (!npsCsvText.trim()) return;
+    setNpsUploading(true);
+    setNpsUploadError('');
+    setNpsUploadResult(null);
+    try {
+      const res = await fetch('/api/admin/nps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: npsUploadMode, csv: npsCsvText }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNpsUploadResult({ count: json.count, total: json.total ?? json.count });
+        setNpsCsvText('');
+        await loadNpsEntries();
+      } else {
+        setNpsUploadError(json.error || 'Upload failed.');
+      }
+    } catch {
+      setNpsUploadError('Network error during upload.');
+    } finally {
+      setNpsUploading(false);
+    }
+  }
+
+  async function handleNpsDelete(id: number) {
+    try {
+      const res = await fetch('/api/admin/nps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'delete', id }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setNpsEntries((prev) => prev.filter((e) => e.id !== id));
+      }
+    } catch {
+      // silent
+    }
+  }
+
+  async function handleNpsClear() {
+    if (!confirm('Delete all NPS entries? This cannot be undone.')) return;
+    try {
+      const res = await fetch('/api/admin/nps', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'clear' }),
+      });
+      const json = await res.json();
+      if (json.success) setNpsEntries([]);
+    } catch {
+      // silent
+    }
   }
 
   const appliedCount = Object.values(itemStates).filter((s) => s === 'applied').length;
@@ -719,6 +821,167 @@ function AdminDashboard({ password }: { password: string }) {
                           </div>
                         </div>
                       ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* NPS Social Proof */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <button
+                onClick={() => setNpsOpen((v) => !v)}
+                className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <div>
+                  <h2 className="font-semibold">NPS Social Proof</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Upload customer NPS comments. The email generator will automatically match and inject peer quotes.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 shrink-0 ml-4">
+                  {npsEntries.length > 0 && (
+                    <span className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-2.5 py-0.5 rounded-full">
+                      {npsEntries.length} entries
+                    </span>
+                  )}
+                  <span className="text-gray-400 text-sm">{npsOpen ? '▲' : '▼'}</span>
+                </div>
+              </button>
+              {npsOpen && (
+                <div className="border-t border-gray-200 dark:border-gray-800 px-6 py-5 space-y-5">
+
+                  {/* CSV upload */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                      Upload from Google Sheets (CSV)
+                    </h3>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                      Export your Google Sheet as CSV. Required columns in order:{' '}
+                      <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">
+                        org_name, org_type, state, nps_score, comment, contact_name (optional), contact_title (optional)
+                      </code>
+                    </p>
+                    <textarea
+                      value={npsCsvText}
+                      onChange={(e) => { setNpsCsvText(e.target.value); setNpsUploadError(''); setNpsUploadResult(null); }}
+                      placeholder={'org_name,org_type,state,nps_score,comment,contact_name,contact_title\n"Oak Park High School","high school","FL",9,"This robot saved us 3 hours a week.","Mike Johnson","Athletic Director"'}
+                      rows={6}
+                      className="w-full px-3 py-2.5 text-xs font-mono rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+                    />
+                    <div className="flex items-center gap-3 mt-3 flex-wrap">
+                      <div className="flex items-center gap-2 text-sm">
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="uploadMode"
+                            value="append"
+                            checked={npsUploadMode === 'append'}
+                            onChange={() => setNpsUploadMode('append')}
+                            className="accent-blue-600"
+                          />
+                          <span className="text-gray-700 dark:text-gray-300">Append</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="uploadMode"
+                            value="upload"
+                            checked={npsUploadMode === 'upload'}
+                            onChange={() => setNpsUploadMode('upload')}
+                            className="accent-blue-600"
+                          />
+                          <span className="text-gray-700 dark:text-gray-300">Replace all</span>
+                        </label>
+                      </div>
+                      <button
+                        onClick={handleNpsUpload}
+                        disabled={npsUploading || !npsCsvText.trim()}
+                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                      >
+                        {npsUploading ? 'Saving…' : 'Save NPS Data'}
+                      </button>
+                    </div>
+                    {npsUploadError && (
+                      <p className="mt-2 text-sm text-red-500">{npsUploadError}</p>
+                    )}
+                    {npsUploadResult && (
+                      <p className="mt-2 text-sm text-green-600 dark:text-green-400">
+                        ✓ {npsUploadResult.count} new entries saved
+                        {npsUploadResult.total !== undefined && npsUploadResult.total !== npsUploadResult.count
+                          ? ` · ${npsUploadResult.total} total`
+                          : ''}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Entries table */}
+                  {npsLoading && (
+                    <p className="text-sm text-gray-400 py-2 text-center">Loading…</p>
+                  )}
+                  {npsError && (
+                    <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-3">{npsError}</p>
+                  )}
+                  {!npsLoading && npsEntries.length === 0 && (
+                    <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-2">
+                      No NPS entries yet. Upload a CSV above to get started.
+                    </p>
+                  )}
+                  {npsEntries.length > 0 && (
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                          {npsEntries.length} entries stored
+                        </h3>
+                        <button
+                          onClick={handleNpsClear}
+                          className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
+                        >
+                          Clear all
+                        </button>
+                      </div>
+                      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                              <th className="text-left px-3 py-2 font-medium">Organisation</th>
+                              <th className="text-left px-3 py-2 font-medium">Type</th>
+                              <th className="text-left px-3 py-2 font-medium">State</th>
+                              <th className="text-center px-3 py-2 font-medium">NPS</th>
+                              <th className="text-left px-3 py-2 font-medium">Comment</th>
+                              <th className="px-3 py-2" />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {npsEntries.map((e) => (
+                              <tr key={e.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                <td className="px-3 py-2.5 text-gray-800 dark:text-gray-200 font-medium max-w-[160px] truncate">
+                                  {e.orgName}
+                                </td>
+                                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 capitalize">{e.orgType}</td>
+                                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 uppercase">{e.state}</td>
+                                <td className="px-3 py-2.5 text-center">
+                                  <span className={`font-semibold tabular-nums ${e.npsScore >= 9 ? 'text-green-600 dark:text-green-400' : e.npsScore >= 7 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-500'}`}>
+                                    {e.npsScore}
+                                  </span>
+                                </td>
+                                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 max-w-[300px]">
+                                  <span className="line-clamp-2">{e.comment}</span>
+                                </td>
+                                <td className="px-3 py-2.5">
+                                  <button
+                                    onClick={() => handleNpsDelete(e.id)}
+                                    className="text-gray-400 hover:text-red-500 transition-colors text-xs"
+                                    title="Delete"
+                                  >
+                                    ✕
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>

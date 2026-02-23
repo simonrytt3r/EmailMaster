@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAnthropicClient, parseJSON } from '@/lib/anthropic';
 import { SYSTEM_PROMPT, buildSequencePrompt } from '@/lib/prompts';
 import { SequenceRequest, SequenceResult } from '@/lib/types';
+import { findMatchingQuotes, formatQuotesForPrompt } from '@/lib/nps-quotes';
 
 export const runtime = 'nodejs';
 
@@ -17,7 +18,9 @@ export async function POST(request: NextRequest) {
     }
 
     const client = getAnthropicClient();
-    const userPrompt = buildSequencePrompt(body);
+    const npsMatch = findMatchingQuotes(body.orgType, body.prospectState);
+    const socialProofQuotes = formatQuotesForPrompt(npsMatch) || undefined;
+    const userPrompt = buildSequencePrompt({ ...body, socialProofQuotes });
 
     const encoder = new TextEncoder();
     let buffer = '';

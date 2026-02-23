@@ -257,6 +257,8 @@ export default function SequencePage() {
   const [targetPersona, setTargetPersona] = useState('');
   const [sequenceLength, setSequenceLength] = useState<3 | 5>(5);
   const [industry, setIndustry] = useState('');
+  const [orgType, setOrgType] = useState('');
+  const [prospectState, setProspectState] = useState('');
   const [painPoints, setPainPoints] = useState('');
   const [differentiator, setDifferentiator] = useState('');
   const [tone, setTone] = useState('');
@@ -326,6 +328,8 @@ export default function SequencePage() {
       targetPersona: targetPersona.trim(),
       sequenceLength,
       industry: industry.trim() || undefined,
+      orgType: orgType.trim() || undefined,
+      prospectState: prospectState.trim() || undefined,
       painPoints: painPoints.trim() || undefined,
       differentiator: differentiator.trim() || undefined,
       tone: tone || undefined,
@@ -499,6 +503,37 @@ export default function SequencePage() {
                       className={inputClass}
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>
+                        Organisation Type
+                        <span className="ml-1 text-ios-blue normal-case font-normal">· NPS quotes</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={orgType}
+                        onChange={(e) => setOrgType(e.target.value)}
+                        placeholder="e.g., high school, golf course"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>
+                        Prospect State
+                        <span className="ml-1 text-ios-blue normal-case font-normal">· NPS quotes</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={prospectState}
+                        onChange={(e) => setProspectState(e.target.value)}
+                        placeholder="e.g., FL, TX, California"
+                        className={inputClass}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-ios-text-3 dark:text-ios-text-2 -mt-2">
+                    When set, peer NPS quotes from matching customers are automatically injected into the sequence prompt.
+                  </p>
                   <div>
                     <label className={labelClass}>Known Pain Points</label>
                     <textarea

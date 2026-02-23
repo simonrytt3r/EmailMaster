@@ -353,6 +353,8 @@ export default function GeneratePage() {
   const [offering, setOffering] = useState('');
   const [targetPersona, setTargetPersona] = useState('');
   const [industry, setIndustry] = useState('');
+  const [orgType, setOrgType] = useState('');
+  const [prospectState, setProspectState] = useState('');
   const [painPoints, setPainPoints] = useState('');
   const [differentiator, setDifferentiator] = useState('');
   const [desiredCTA, setDesiredCTA] = useState('');
@@ -426,6 +428,8 @@ export default function GeneratePage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           emailType, offering, targetPersona, industry,
+          orgType: orgType || undefined,
+          prospectState: prospectState || undefined,
           painPoints, differentiator, desiredCTA, tone,
           mustInclude,
           previousEmail,
@@ -563,7 +567,38 @@ export default function GeneratePage() {
                 <label className={labelClass}>Industry</label>
                 <input type="text" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g., K-12 Schools" className={inputClass} />
               </div>
-              <div className="pt-4">
+              <div>
+                <label className={labelClass}>
+                  Organisation Type
+                  <span className="ml-1 text-ios-blue normal-case font-normal">· NPS quotes</span>
+                </label>
+                <input
+                  type="text"
+                  value={orgType}
+                  onChange={(e) => setOrgType(e.target.value)}
+                  placeholder="e.g., high school, golf course, parks & rec"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>
+                  Prospect State
+                  <span className="ml-1 text-ios-blue normal-case font-normal">· NPS quotes</span>
+                </label>
+                <input
+                  type="text"
+                  value={prospectState}
+                  onChange={(e) => setProspectState(e.target.value)}
+                  placeholder="e.g., FL, TX, California"
+                  className={inputClass}
+                />
+              </div>
+              <div className="col-span-2 -mt-1">
+                <p className="text-[11px] text-ios-text-3 dark:text-ios-text-2">
+                  When set, peer NPS quotes from matching customers are automatically injected into the generation prompt.
+                </p>
+              </div>
+              <div>
                 <label className={labelClass}>Tone</label>
                 <select value={tone} onChange={(e) => setTone(e.target.value)} className={inputClass}>
                   <option value="">Any</option>

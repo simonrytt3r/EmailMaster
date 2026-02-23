@@ -139,6 +139,7 @@ export function buildGenerationPrompt(params: {
   mustInclude?: string;
   previousEmail?: string;
   prospectContext?: string;
+  socialProofQuotes?: string;
 }): string {
   const optionalFields = [
     params.industry && `Industry/Vertical: ${params.industry}`,
@@ -154,8 +155,12 @@ export function buildGenerationPrompt(params: {
     ? `\n## PROSPECT CONTEXT\nThis specific prospect has been researched. Use this intelligence to personalize all 3 email variations:\n\n${params.prospectContext}\n\nIMPORTANT: Each variation's opening line must reference something specific from the prospect context above — a recent news item, a known challenge, or a personalization hook. Do not open with a generic line. The email should feel like it was written by someone who actually looked this person up.\n`
     : '';
 
+  const socialProofSection = params.socialProofQuotes
+    ? `\n${params.socialProofQuotes}\n`
+    : '';
+
   return `Generate 3 cold email variations for the following brief:
-${prospectSection}
+${prospectSection}${socialProofSection}
 Email Type: ${params.emailType}
 What You're Selling/Offering: ${params.offering}
 Target Persona: ${params.targetPersona}
@@ -240,6 +245,7 @@ export function buildSequencePrompt(params: {
   tone?: string;
   mustInclude?: string;
   prospectContext?: string;
+  socialProofQuotes?: string;
 }): string {
   const is5Touch = params.sequenceLength === 5;
 
@@ -269,6 +275,10 @@ export function buildSequencePrompt(params: {
     ? `\n## PROSPECT CONTEXT\nResearch on this specific prospect — use it to personalise Touch 1 and where natural across the sequence:\n\n${params.prospectContext}\n`
     : '';
 
+  const socialProofSection = params.socialProofQuotes
+    ? `\n${params.socialProofQuotes}\n`
+    : '';
+
   const touchInstructions = touches
     .map(t => `**Touch ${t.num} — "${t.label}" (Day ${t.day}):** ${t.strategy}`)
     .join('\n');
@@ -288,7 +298,7 @@ export function buildSequencePrompt(params: {
     .join(',\n');
 
   return `Generate a ${params.sequenceLength}-touch cold email sequence for the following brief:
-${prospectSection}
+${prospectSection}${socialProofSection}
 What You're Selling/Offering: ${params.offering}
 Target Persona: ${params.targetPersona}
 ${optionalFields}

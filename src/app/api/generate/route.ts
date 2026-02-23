@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAnthropicClient, parseJSON } from '@/lib/anthropic';
 import { SYSTEM_PROMPT, buildGenerationPrompt, buildRefinementPrompt } from '@/lib/prompts';
 import { GenerateRequest, GenerateResult } from '@/lib/types';
+import { findMatchingQuotes, formatQuotesForPrompt } from '@/lib/nps-quotes';
 
 export const runtime = 'nodejs';
 
@@ -30,6 +31,9 @@ export async function POST(request: NextRequest) {
         body.refine.instructions
       );
     } else {
+      const npsMatch = findMatchingQuotes(body.orgType, body.prospectState);
+      const socialProofQuotes = formatQuotesForPrompt(npsMatch) || undefined;
+
       userPrompt = buildGenerationPrompt({
         emailType: body.emailType,
         offering: body.offering,
@@ -42,6 +46,7 @@ export async function POST(request: NextRequest) {
         mustInclude: body.mustInclude,
         previousEmail: body.previousEmail,
         prospectContext: body.prospectContext,
+        socialProofQuotes,
       });
     }
 
