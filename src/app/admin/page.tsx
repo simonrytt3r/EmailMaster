@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -263,6 +263,8 @@ function AdminDashboard({ password }: { password: string }) {
   const [npsUploadMode, setNpsUploadMode] = useState<'upload' | 'append'>('append');
   const [npsUploadError, setNpsUploadError] = useState('');
   const [npsUploadResult, setNpsUploadResult] = useState<{ count: number; total?: number } | null>(null);
+  const [npsFileName, setNpsFileName] = useState('');
+  const npsFileRef = useRef<HTMLInputElement>(null);
 
   async function loadData() {
     setDataLoading(true);
@@ -433,6 +435,8 @@ function AdminDashboard({ password }: { password: string }) {
       if (json.success) {
         setNpsUploadResult({ count: json.count, total: json.total ?? json.count });
         setNpsCsvText('');
+        setNpsFileName('');
+        if (npsFileRef.current) npsFileRef.current.value = '';
         await loadNpsEntries();
       } else {
         setNpsUploadError(json.error || 'Upload failed.');
@@ -853,24 +857,67 @@ function AdminDashboard({ password }: { password: string }) {
 
                   {/* CSV upload */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      Upload from Google Sheets (CSV)
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                      Upload CSV file
                     </h3>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                      Export your Google Sheet as CSV. Required columns in order:{' '}
+                      Export your Google Sheet as a <strong>.csv</strong> file. Required columns in order:{' '}
                       <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded text-xs">
                         org_name, org_type, state, nps_score, comment, contact_name (optional), contact_title (optional)
                       </code>
                     </p>
-                    <textarea
-                      value={npsCsvText}
-                      onChange={(e) => { setNpsCsvText(e.target.value); setNpsUploadError(''); setNpsUploadResult(null); }}
-                      placeholder={'org_name,org_type,state,nps_score,comment,contact_name,contact_title\n"Oak Park High School","high school","FL",9,"This robot saved us 3 hours a week.","Mike Johnson","Athletic Director"'}
-                      rows={6}
-                      className="w-full px-3 py-2.5 text-xs font-mono rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-gray-800 dark:text-gray-200 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                    />
-                    <div className="flex items-center gap-3 mt-3 flex-wrap">
-                      <div className="flex items-center gap-2 text-sm">
+
+                    {/* File drop zone */}
+                    <label
+                      htmlFor="nps-csv-input"
+                      className={`flex flex-col items-center justify-center w-full rounded-lg border-2 border-dashed cursor-pointer transition-colors px-6 py-8 ${
+                        npsFileName
+                          ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/20 dark:border-blue-500'
+                          : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
+                      }`}
+                    >
+                      {npsFileName ? (
+                        <>
+                          <svg className="w-8 h-8 text-blue-500 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <span className="text-sm font-medium text-blue-700 dark:text-blue-300 text-center break-all">
+                            {npsFileName}
+                          </span>
+                          <span className="text-xs text-blue-500 dark:text-blue-400 mt-1">Click to choose a different file</span>
+                        </>
+                      ) : (
+                        <>
+                          <svg className="w-8 h-8 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Click to choose your CSV file</span>
+                          <span className="text-xs text-gray-400 dark:text-gray-500 mt-1">or drag and drop</span>
+                        </>
+                      )}
+                      <input
+                        id="nps-csv-input"
+                        ref={npsFileRef}
+                        type="file"
+                        accept=".csv,text/csv"
+                        className="hidden"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          setNpsFileName(file.name);
+                          setNpsUploadError('');
+                          setNpsUploadResult(null);
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            setNpsCsvText((ev.target?.result as string) ?? '');
+                          };
+                          reader.readAsText(file);
+                        }}
+                      />
+                    </label>
+
+                    <div className="flex items-center gap-4 mt-3 flex-wrap">
+                      <div className="flex items-center gap-3 text-sm">
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
                             type="radio"
@@ -880,7 +927,7 @@ function AdminDashboard({ password }: { password: string }) {
                             onChange={() => setNpsUploadMode('append')}
                             className="accent-blue-600"
                           />
-                          <span className="text-gray-700 dark:text-gray-300">Append</span>
+                          <span className="text-gray-700 dark:text-gray-300">Append to existing</span>
                         </label>
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <input
@@ -897,9 +944,9 @@ function AdminDashboard({ password }: { password: string }) {
                       <button
                         onClick={handleNpsUpload}
                         disabled={npsUploading || !npsCsvText.trim()}
-                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
+                        className="ml-auto px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors"
                       >
-                        {npsUploading ? 'Saving…' : 'Save NPS Data'}
+                        {npsUploading ? 'Saving…' : `Save${npsFileName ? '' : ' NPS Data'}`}
                       </button>
                     </div>
                     {npsUploadError && (
