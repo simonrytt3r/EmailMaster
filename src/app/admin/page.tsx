@@ -81,6 +81,7 @@ interface NpsEntryLocal {
   orgName: string;
   orgType: string;
   state: string;
+  country: string;
   npsScore: number;
   comment: string;
   contactName?: string;
@@ -974,63 +975,103 @@ function AdminDashboard({ password }: { password: string }) {
                       No NPS entries yet. Upload a CSV above to get started.
                     </p>
                   )}
-                  {npsEntries.length > 0 && (
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                          {npsEntries.length} entries stored
-                        </h3>
-                        <button
-                          onClick={handleNpsClear}
-                          className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors"
-                        >
-                          Clear all
-                        </button>
-                      </div>
-                      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                              <th className="text-left px-3 py-2 font-medium">Organisation</th>
-                              <th className="text-left px-3 py-2 font-medium">Type</th>
-                              <th className="text-left px-3 py-2 font-medium">State</th>
-                              <th className="text-center px-3 py-2 font-medium">NPS</th>
-                              <th className="text-left px-3 py-2 font-medium">Comment</th>
-                              <th className="px-3 py-2" />
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {npsEntries.map((e) => (
-                              <tr key={e.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                <td className="px-3 py-2.5 text-gray-800 dark:text-gray-200 font-medium max-w-[160px] truncate">
-                                  {e.orgName}
-                                </td>
-                                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 capitalize">{e.orgType}</td>
-                                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 uppercase">{e.state}</td>
-                                <td className="px-3 py-2.5 text-center">
-                                  <span className={`font-semibold tabular-nums ${e.npsScore >= 9 ? 'text-green-600 dark:text-green-400' : e.npsScore >= 7 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-500'}`}>
-                                    {e.npsScore}
-                                  </span>
-                                </td>
-                                <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 max-w-[300px]">
-                                  <span className="line-clamp-2">{e.comment}</span>
-                                </td>
-                                <td className="px-3 py-2.5">
-                                  <button
-                                    onClick={() => handleNpsDelete(e.id)}
-                                    className="text-gray-400 hover:text-red-500 transition-colors text-xs"
-                                    title="Delete"
-                                  >
-                                    ✕
-                                  </button>
-                                </td>
-                              </tr>
+                  {npsEntries.length > 0 && (() => {
+                    const withComment = npsEntries.filter((e) => e.comment.trim().length > 0);
+                    const usEntries   = npsEntries.filter((e) => e.country === 'United States');
+                    const euMap = new Map<string, number>();
+                    npsEntries.filter((e) => e.country !== 'United States').forEach((e) => {
+                      euMap.set(e.country, (euMap.get(e.country) ?? 0) + 1);
+                    });
+                    return (
+                      <div className="space-y-4">
+                        {/* Summary row */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
+                              {npsEntries.length} entries
+                            </span>
+                            <span className="text-xs text-gray-400">·</span>
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {withComment.length} with quotes
+                            </span>
+                            <span className="text-xs text-gray-400">·</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400">
+                              US: {usEntries.length}
+                            </span>
+                            {Array.from(euMap.entries()).map(([country, count]) => (
+                              <span key={country} className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400">
+                                {country}: {count}
+                              </span>
                             ))}
-                          </tbody>
-                        </table>
+                          </div>
+                          <button
+                            onClick={handleNpsClear}
+                            className="text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400 transition-colors shrink-0"
+                          >
+                            Clear all
+                          </button>
+                        </div>
+                        {/* Table */}
+                        <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                <th className="text-left px-3 py-2 font-medium">Organisation</th>
+                                <th className="text-left px-3 py-2 font-medium">Type</th>
+                                <th className="text-left px-3 py-2 font-medium">Region</th>
+                                <th className="text-center px-3 py-2 font-medium">NPS</th>
+                                <th className="text-left px-3 py-2 font-medium">Comment</th>
+                                <th className="px-3 py-2" />
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                              {npsEntries.map((e) => {
+                                const region = e.country === 'United States'
+                                  ? (e.state || 'US')
+                                  : e.country;
+                                const isEU = e.country !== 'United States';
+                                return (
+                                  <tr key={e.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                    <td className="px-3 py-2.5 text-gray-800 dark:text-gray-200 font-medium max-w-[160px] truncate">
+                                      {e.orgName}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 capitalize">
+                                      {e.orgType || <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${isEU ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'}`}>
+                                        {region}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-center">
+                                      <span className={`font-semibold tabular-nums ${e.npsScore >= 9 ? 'text-green-600 dark:text-green-400' : e.npsScore >= 7 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-500'}`}>
+                                        {e.npsScore}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 max-w-[280px]">
+                                      {e.comment
+                                        ? <span className="line-clamp-2">{e.comment}</span>
+                                        : <span className="text-gray-300 dark:text-gray-600 italic">no comment</span>
+                                      }
+                                    </td>
+                                    <td className="px-3 py-2.5">
+                                      <button
+                                        onClick={() => handleNpsDelete(e.id)}
+                                        className="text-gray-400 hover:text-red-500 transition-colors text-xs"
+                                        title="Delete"
+                                      >
+                                        ✕
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
             </div>

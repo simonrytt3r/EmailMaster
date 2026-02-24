@@ -156,8 +156,12 @@ export interface NpsEntry {
   date: string;
   orgName: string;
   orgType: string;
+  /** 2-letter US state code (e.g. 'FL') — empty string for non-US entries */
   state: string;
+  /** 'United States' for US entries; European country name (e.g. 'Germany') for EU entries */
+  country: string;
   npsScore: number;
+  /** May be empty — entries with no comment are stored but excluded from quote injection */
   comment: string;
   contactName?: string;
   contactTitle?: string;
@@ -169,7 +173,7 @@ export interface NpsStore {
 
 export interface NpsMatchResult {
   entries: NpsEntry[];
-  matchType: 'exact' | 'orgType' | 'state' | 'none';
+  matchType: 'exact' | 'orgType' | 'location' | 'none';
 }
 
 export interface SequenceResult {
