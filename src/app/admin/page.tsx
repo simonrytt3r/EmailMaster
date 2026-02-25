@@ -279,6 +279,68 @@ function AdminDashboard({ password }: { password: string }) {
     parsed: number;
   } | null>(null);
 
+  // ── Research Cache ──────────────────────────────────────────────────────────
+  const [cacheOpen, setCacheOpen] = useState(false);
+  const [cacheEntries, setCacheEntries] = useState<Array<{
+    key: string; personName?: string; company: string;
+    cachedAt: string; expiresAt: string; hasNewInfo: boolean; newInfoFields: string[];
+  }>>([]);
+  const [cacheSettings, setCacheSettings] = useState<{ allowUserRefresh: boolean; cacheDays: number }>({
+    allowUserRefresh: true, cacheDays: 30,
+  });
+  const [cacheLoading, setCacheLoading] = useState(false);
+  const [cacheSaving, setCacheSaving] = useState(false);
+
+  async function loadCacheData() {
+    setCacheLoading(true);
+    try {
+      const res = await fetch('/api/admin/research-cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'read' }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setCacheEntries(json.entries ?? []);
+        setCacheSettings(json.settings ?? { allowUserRefresh: true, cacheDays: 30 });
+      }
+    } catch { /* silent */ }
+    finally { setCacheLoading(false); }
+  }
+
+  async function saveCacheSettings(patch: Partial<{ allowUserRefresh: boolean; cacheDays: number }>) {
+    setCacheSaving(true);
+    try {
+      const res = await fetch('/api/admin/research-cache', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'update-settings', ...patch }),
+      });
+      const json = await res.json();
+      if (json.success) setCacheSettings(json.settings);
+    } catch { /* silent */ }
+    finally { setCacheSaving(false); }
+  }
+
+  async function deleteCacheEntry(key: string) {
+    await fetch('/api/admin/research-cache', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action: 'delete', key }),
+    });
+    setCacheEntries((prev) => prev.filter((e) => e.key !== key));
+  }
+
+  async function clearAllCache() {
+    if (!confirm('Delete all cached research entries? This cannot be undone.')) return;
+    await fetch('/api/admin/research-cache', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password, action: 'clear' }),
+    });
+    setCacheEntries([]);
+  }
+
   async function loadData() {
     setDataLoading(true);
     setDataError('');
@@ -356,6 +418,7 @@ function AdminDashboard({ password }: { password: string }) {
     loadData();
     loadReplies();
     loadNpsEntries();
+    loadCacheData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1181,6 +1244,130 @@ function AdminDashboard({ password }: { password: string }) {
                       </div>
                     );
                   })()}
+                </div>
+              )}
+            </div>
+
+            {/* Research Cache */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <button
+                onClick={() => { setCacheOpen((v) => !v); if (!cacheOpen) loadCacheData(); }}
+                className="w-full px-6 py-4 flex items-center justify-between text-left hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <div>
+                  <h2 className="font-semibold">Research Cache</h2>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+                    Cached prospect lookups · saves tokens · {cacheEntries.length} stored
+                  </p>
+                </div>
+                <span className="text-gray-400 text-sm shrink-0 ml-4">{cacheOpen ? '▲' : '▼'}</span>
+              </button>
+              {cacheOpen && (
+                <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 space-y-5">
+
+                  {/* Settings */}
+                  <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 space-y-4">
+                    <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">Cache Settings</p>
+
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">Allow users to refresh before 30 days</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                          When on, a &quot;Refresh now&quot; button appears on cached results so users can force a new search.
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => saveCacheSettings({ allowUserRefresh: !cacheSettings.allowUserRefresh })}
+                        disabled={cacheSaving}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${cacheSettings.allowUserRefresh ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'} disabled:opacity-50`}
+                      >
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${cacheSettings.allowUserRefresh ? 'translate-x-6' : 'translate-x-1'}`} />
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <label className="text-sm text-gray-700 dark:text-gray-300 font-medium whitespace-nowrap">Cache duration (days)</label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={365}
+                        value={cacheSettings.cacheDays}
+                        onChange={(e) => setCacheSettings((s) => ({ ...s, cacheDays: Number(e.target.value) }))}
+                        onBlur={(e) => saveCacheSettings({ cacheDays: Number(e.target.value) })}
+                        className="w-20 px-2 py-1 text-sm rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200"
+                      />
+                      <span className="text-xs text-gray-400">default: 30</span>
+                    </div>
+                  </div>
+
+                  {/* Cache entries */}
+                  {cacheLoading && <p className="text-sm text-gray-400 text-center py-2">Loading…</p>}
+                  {!cacheLoading && cacheEntries.length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-4">No cached lookups yet. Results will be cached automatically when users run research.</p>
+                  )}
+                  {!cacheLoading && cacheEntries.length > 0 && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-semibold text-gray-700 dark:text-gray-300">{cacheEntries.length} cached lookups</p>
+                        <button onClick={clearAllCache} className="text-xs text-red-500 hover:text-red-700 transition-colors">Clear all</button>
+                      </div>
+                      <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                              <th className="text-left px-3 py-2 font-medium">Lookup</th>
+                              <th className="text-left px-3 py-2 font-medium">Cached</th>
+                              <th className="text-left px-3 py-2 font-medium">Expires</th>
+                              <th className="text-left px-3 py-2 font-medium">Status</th>
+                              <th className="px-3 py-2" />
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {cacheEntries.map((e) => {
+                              const cachedAt = new Date(e.cachedAt);
+                              const expiresAt = new Date(e.expiresAt);
+                              const now = new Date();
+                              const daysAgo = Math.floor((now.getTime() - cachedAt.getTime()) / 86_400_000);
+                              const daysLeft = Math.ceil((expiresAt.getTime() - now.getTime()) / 86_400_000);
+                              const expired = daysLeft <= 0;
+                              return (
+                                <tr key={e.key} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                  <td className="px-3 py-2.5">
+                                    <p className="font-medium text-gray-800 dark:text-gray-200">{e.company}</p>
+                                    {e.personName && <p className="text-gray-400">{e.personName}</p>}
+                                  </td>
+                                  <td className="px-3 py-2.5 text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                                    {daysAgo === 0 ? 'Today' : `${daysAgo}d ago`}
+                                  </td>
+                                  <td className="px-3 py-2.5 whitespace-nowrap">
+                                    {expired
+                                      ? <span className="text-red-500">Expired</span>
+                                      : <span className="text-gray-500 dark:text-gray-400">in {daysLeft}d</span>
+                                    }
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    {e.hasNewInfo
+                                      ? <span className="px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 font-medium">New info</span>
+                                      : <span className="text-gray-400">—</span>
+                                    }
+                                  </td>
+                                  <td className="px-3 py-2.5">
+                                    <button
+                                      onClick={() => deleteCacheEntry(e.key)}
+                                      className="text-gray-400 hover:text-red-500 transition-colors"
+                                      title="Delete"
+                                    >
+                                      ✕
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

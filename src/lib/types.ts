@@ -121,6 +121,28 @@ export interface ResearchRequest {
   websiteUrl?: string;
 }
 
+export interface ResearchCacheEntry {
+  key: string;
+  personName?: string;
+  company: string;
+  result: ResearchResult;
+  cachedAt: string;       // ISO date string
+  expiresAt: string;      // ISO date string (cachedAt + cacheDays)
+  previousResult?: ResearchResult;
+  hasNewInfo: boolean;
+  newInfoFields: string[]; // e.g. ['recentNews', 'recentActivity']
+}
+
+export interface ResearchCacheSettings {
+  allowUserRefresh: boolean;
+  cacheDays: number;
+}
+
+export interface ResearchCacheStore {
+  settings: ResearchCacheSettings;
+  entries: ResearchCacheEntry[];
+}
+
 // ─── Sequence Builder ──────────────────────────────────────────────────────────
 
 export interface SequenceTouchEmail {

@@ -52,6 +52,14 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
   const [selectedHooks, setSelectedHooks] = useState<Set<string>>(new Set());
   const [recentLookups, setRecentLookups] = useState<RecentLookup[]>([]);
   const [showRecent, setShowRecent] = useState(false);
+  const [cacheMeta, setCacheMeta] = useState<{
+    cached: boolean;
+    daysAgo: number;
+    daysUntilExpiry: number;
+    hasNewInfo: boolean;
+    newInfoFields: string[];
+    allowUserRefresh: boolean;
+  } | null>(null);
 
   // Load session history on mount
   useEffect(() => {
@@ -111,17 +119,17 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
     setResearchedInputs(null);
     setSelectedHooks(new Set());
     setError(null);
+    setCacheMeta(null);
   }
 
-  async function handleResearch() {
+  async function handleResearch(force = false) {
     if (!inputs.company.trim()) {
       setError('Organization name is required.');
       return;
     }
     setLoading(true);
     setError(null);
-    setResult(null);
-    setSelectedHooks(new Set());
+    if (!force) { setResult(null); setSelectedHooks(new Set()); }
 
     try {
       const res = await fetch('/api/research', {
@@ -133,6 +141,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
           company: inputs.company,
           linkedinUrl: inputs.linkedinUrl || undefined,
           websiteUrl: inputs.websiteUrl || undefined,
+          force,
         }),
       });
 
@@ -144,10 +153,17 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
 
       setResult(data.result);
       setResearchedInputs({ ...inputs });
-      saveToSession(data.result, inputs);
+      setCacheMeta({
+        cached: data.cached ?? false,
+        daysAgo: data.daysAgo ?? 0,
+        daysUntilExpiry: data.daysUntilExpiry ?? 30,
+        hasNewInfo: data.hasNewInfo ?? false,
+        newInfoFields: data.newInfoFields ?? [],
+        allowUserRefresh: data.allowUserRefresh ?? false,
+      });
+      if (!data.cached) saveToSession(data.result, inputs);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Something went wrong.';
-      // If very little was found, show a friendly message
       setError(
         msg.includes('parse')
           ? 'Limited information found online. You can still generate emails — try adding more context manually.'
@@ -319,7 +335,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
               <div className="space-y-1.5">
                 <button
                   type="button"
-                  onClick={handleResearch}
+                  onClick={() => handleResearch()}
                   disabled={loading || !inputs.company.trim()}
                   className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90 flex items-center justify-center gap-2"
                 >
@@ -346,6 +362,69 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
           {/* Research Results */}
           {result && (
             <div className="p-4 space-y-4">
+
+              {/* Cache banner */}
+              {cacheMeta && cacheMeta.cached && !cacheMeta.hasNewInfo && (
+                <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary border border-ios-sep/30 dark:border-ios-dark-sep/60">
+                  <div className="flex items-center gap-2 text-[12px] text-ios-text-2">
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 text-ios-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>
+                      Cached {cacheMeta.daysAgo === 0 ? 'today' : `${cacheMeta.daysAgo}d ago`}
+                      {' · '}expires in {cacheMeta.daysUntilExpiry}d
+                    </span>
+                  </div>
+                  {cacheMeta.allowUserRefresh && (
+                    <button
+                      type="button"
+                      onClick={() => handleResearch(true)}
+                      disabled={loading}
+                      className="text-[12px] text-ios-blue font-medium hover:underline disabled:opacity-40"
+                    >
+                      {loading ? 'Refreshing…' : 'Refresh now'}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* New info banner — shown after a force-refresh finds changes */}
+              {cacheMeta && cacheMeta.hasNewInfo && (
+                <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-ios-sm border border-amber-200 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-950/20">
+                  <svg className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-amber-700 dark:text-amber-400">
+                      New info found
+                    </p>
+                    <p className="text-[12px] text-amber-600 dark:text-amber-500 mt-0.5">
+                      Updated: {cacheMeta.newInfoFields
+                        .map((f) => ({
+                          recentNews: 'Recent News',
+                          keyFacts: 'Key Facts',
+                          challenges: 'Challenges',
+                          recentActivity: 'Recent Activity',
+                          notableItems: 'Notable Items',
+                          orgSummary: 'Organisation Summary',
+                          personSummary: 'Person Summary',
+                        }[f] ?? f))
+                        .join(', ')}
+                    </p>
+                  </div>
+                  {cacheMeta.allowUserRefresh && (
+                    <button
+                      type="button"
+                      onClick={() => handleResearch(true)}
+                      disabled={loading}
+                      className="text-[12px] text-amber-700 dark:text-amber-400 font-medium hover:underline disabled:opacity-40 shrink-0"
+                    >
+                      {loading ? 'Refreshing…' : 'Refresh again'}
+                    </button>
+                  )}
+                </div>
+              )}
+
               {/* Personalization Hooks — split into company + person */}
               {((result.personalizationHooks?.length > 0) || (result.personHooks?.length > 0)) && (
                 <div className="space-y-4">

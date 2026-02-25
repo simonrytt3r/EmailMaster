@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { ResearchRequest, ResearchResult } from '@/lib/types';
+import {
+  makeCacheKey,
+  getCachedEntry,
+  saveCacheEntry,
+  getCacheSettings,
+} from '@/lib/research-cache';
 
 export const runtime = 'nodejs';
 
@@ -152,7 +158,7 @@ async function researchWithWebSearch(
 // ---------------------------------------------------------------------------
 export async function POST(request: NextRequest) {
   try {
-    const body: ResearchRequest = await request.json();
+    const body: ResearchRequest & { force?: boolean } = await request.json();
 
     if (!body.company?.trim()) {
       return NextResponse.json(
@@ -169,6 +175,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Cache check ──────────────────────────────────────────────────────────
+    const cacheKey = makeCacheKey(body.personName, body.company);
+    const settings = getCacheSettings();
+
+    if (body.force && !settings.allowUserRefresh) {
+      // Force-refresh is disabled by the admin — ignore the flag silently
+      body.force = false;
+    }
+
+    if (!body.force) {
+      const cached = getCachedEntry(cacheKey);
+      if (cached) {
+        console.log('[research] Cache hit for:', cacheKey);
+        const cachedAt = new Date(cached.cachedAt);
+        const expiresAt = new Date(cached.expiresAt);
+        const now = new Date();
+        const daysAgo = Math.floor((now.getTime() - cachedAt.getTime()) / 86_400_000);
+        const daysUntilExpiry = Math.ceil((expiresAt.getTime() - now.getTime()) / 86_400_000);
+        return NextResponse.json({
+          success: true,
+          result: cached.result,
+          cached: true,
+          cachedAt: cached.cachedAt,
+          daysAgo,
+          daysUntilExpiry,
+          hasNewInfo: cached.hasNewInfo,
+          newInfoFields: cached.newInfoFields,
+          allowUserRefresh: settings.allowUserRefresh,
+        });
+      }
+    }
+
+    // ── Live research ────────────────────────────────────────────────────────
     const client = new Anthropic({ apiKey });
     const tavilyKey = process.env.TAVILY_API_KEY;
 
@@ -180,7 +219,6 @@ export async function POST(request: NextRequest) {
     }
 
     if (!response) {
-      // Either no Tavily key, or Tavily returned nothing — use Anthropic web_search
       console.log('[research] Using Anthropic web_search for:', body.company);
       response = await researchWithWebSearch(client, body);
     }
@@ -194,8 +232,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Strip citation tags injected by the web_search tool (<cite index="...">...</cite>)
-    // and markdown fences, then find the JSON object
     const stripped = resultText
       .replace(/<cite[^>]*>/g, '')
       .replace(/<\/cite>/g, '');
@@ -217,7 +253,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true, result });
+    // ── Save to cache ────────────────────────────────────────────────────────
+    const saved = saveCacheEntry(cacheKey, body.personName, body.company, result);
+
+    return NextResponse.json({
+      success: true,
+      result,
+      cached: false,
+      cachedAt: saved.cachedAt,
+      daysAgo: 0,
+      daysUntilExpiry: settings.cacheDays,
+      hasNewInfo: saved.hasNewInfo,
+      newInfoFields: saved.newInfoFields,
+      allowUserRefresh: settings.allowUserRefresh,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[research] Unhandled error:', message);
