@@ -169,60 +169,102 @@ function detectColumns(headers: string[]): Record<string, number> {
   };
 }
 
+export interface ParseStats {
+  detectedColumns: Record<string, number>;
+  headerFields: string[];
+  totalDataRows: number;
+  skippedEmpty: number;
+  skippedNoOrgName: number;
+  skippedDuplicates: number;
+  parsed: number;
+}
+
 /**
- * Full CSV parser.
+ * Full RFC 4180–compliant CSV parser.
  *
- * Handles:
- * - UTF-8 BOM
- * - Windows (\r\n) and legacy Mac (\r) line endings
- * - Comma and semicolon delimiters (auto-detected from header row)
- * - RFC 4180 double-quoted fields with embedded delimiters and newlines
- * - Column detection by header name — no fixed column order required
- * - [STATE] / [COUNTRY] bracket prefix extraction from org name
- * - US vs European classification with language-detection fallback
- * - Empty comment rows are stored (but won't surface as quotes)
- * - Only invalid NPS score (outside 0–10) or empty org name cause a row skip
+ * Key fixes vs. previous version:
+ * - Parses the ENTIRE CSV as a character stream (no pre-split on \n) so that
+ *   quoted fields containing newlines (e.g. multi-line NPS comments) are
+ *   handled correctly as a single field.
+ * - NPS score is now OPTIONAL — rows without a detectable score are stored
+ *   with npsScore = -1 rather than being discarded.
+ * - Returns a ParseStats object alongside entries for UI diagnostics.
+ *
+ * Handles: UTF-8 BOM, \r\n / \r line endings, comma and semicolon delimiters
+ * (auto-detected), header-aware column mapping, [STATE]/[COUNTRY] prefixes,
+ * US vs EU classification, deduplication.
  */
-function parseCSV(csv: string): NpsEntry[] {
-  // 1. Normalise encoding and line endings
-  const normalized = csv
-    .replace(/^\uFEFF/, '')        // strip UTF-8 BOM
-    .replace(/\r\n/g, '\n')
-    .replace(/\r/g, '\n')
-    .trim();
+function parseCSV(csv: string): { entries: NpsEntry[]; stats: ParseStats } {
+  // 1. Normalise encoding
+  const text = csv.replace(/^\uFEFF/, ''); // strip UTF-8 BOM
 
-  const lines = normalized.split('\n');
-  if (lines.length < 2) return [];
-
-  // 2. Auto-detect delimiter from header row
-  const headerLine = lines[0];
-  const commaCount = (headerLine.match(/,/g) ?? []).length;
-  const semiCount  = (headerLine.match(/;/g)  ?? []).length;
+  // 2. Auto-detect delimiter from the first line
+  let firstLineEnd = text.indexOf('\n');
+  if (firstLineEnd === -1) firstLineEnd = text.length;
+  const firstLine = text.slice(0, firstLineEnd);
+  const commaCount = (firstLine.match(/,/g) ?? []).length;
+  const semiCount  = (firstLine.match(/;/g)  ?? []).length;
   const delim = semiCount > commaCount ? ';' : ',';
 
-  // 3. RFC 4180 field parser (handles quoted fields with embedded delimiters)
-  function parseRow(line: string): string[] {
-    const fields: string[] = [];
-    let cur = '';
+  // 3. Full RFC 4180 tokeniser — produces an array of rows (each row = string[])
+  function tokenise(src: string): string[][] {
+    const rows: string[][] = [];
+    let row: string[] = [];
+    let field = '';
     let inQuote = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
+    let i = 0;
+
+    while (i < src.length) {
+      const ch = src[i];
+
       if (inQuote) {
-        if (ch === '"' && line[i + 1] === '"') { cur += '"'; i++; }
-        else if (ch === '"') { inQuote = false; }
-        else { cur += ch; }
-      } else {
-        if (ch === '"') { inQuote = true; }
-        else if (ch === delim) { fields.push(cur.trim()); cur = ''; }
-        else { cur += ch; }
+        if (ch === '"') {
+          if (src[i + 1] === '"') { field += '"'; i += 2; continue; } // escaped quote
+          inQuote = false; i++; continue;                              // closing quote
+        }
+        field += ch; i++; continue;
       }
+
+      // Not in a quoted field
+      if (ch === '"') { inQuote = true; i++; continue; }
+
+      if (ch === delim) {
+        row.push(field.trim());
+        field = '';
+        i++;
+        continue;
+      }
+
+      // Line ending — end of record
+      if (ch === '\r' || ch === '\n') {
+        row.push(field.trim());
+        field = '';
+        // normalise \r\n
+        if (ch === '\r' && src[i + 1] === '\n') i++;
+        if (row.some((f) => f !== '')) rows.push(row); // skip blank lines
+        row = [];
+        i++;
+        continue;
+      }
+
+      field += ch;
+      i++;
     }
-    fields.push(cur.trim());
-    return fields;
+
+    // Final field / row
+    if (field.trim() || row.length > 0) {
+      row.push(field.trim());
+      if (row.some((f) => f !== '')) rows.push(row);
+    }
+
+    return rows;
   }
 
-  // 4. Detect column positions from header
-  const headerFields = parseRow(headerLine);
+  const rows = tokenise(text);
+  if (rows.length < 2) return { entries: [], stats: { detectedColumns: {}, headerFields: [], totalDataRows: 0, skippedEmpty: 0, skippedNoOrgName: 0, skippedDuplicates: 0, parsed: 0 } };
+
+  // 4. Detect column positions from header row
+  const headerFields = rows[0];
   const cols = detectColumns(headerFields);
 
   // Helper: get a field value by semantic name, falling back to positional index
@@ -231,27 +273,33 @@ function parseCSV(csv: string): NpsEntry[] {
 
   // 5. Parse data rows
   const entries: NpsEntry[] = [];
-  const seen = new Set<string>(); // simple dedup by orgName+score+comment
+  const seen = new Set<string>();
+  const stats: ParseStats = {
+    detectedColumns: cols,
+    headerFields,
+    totalDataRows: rows.length - 1,
+    skippedEmpty: 0,
+    skippedNoOrgName: 0,
+    skippedDuplicates: 0,
+    parsed: 0,
+  };
 
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
-
-    const row = parseRow(line);
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
 
     // --- org name (required) ---
     const rawOrgName = get(row, 'orgName', 0);
-    if (!rawOrgName) continue;
+    if (!rawOrgName) { stats.skippedNoOrgName++; continue; }
 
-    // --- NPS score (required, 0–10) ---
+    // --- NPS score (optional — store -1 when not found) ---
     const npsScoreRaw = get(row, 'npsScore', 3);
-    const npsScore = parseInt(npsScoreRaw, 10);
-    if (isNaN(npsScore) || npsScore < 0 || npsScore > 10) continue;
+    const parsed = parseInt(npsScoreRaw, 10);
+    const npsScore = (!isNaN(parsed) && parsed >= 0 && parsed <= 10) ? parsed : -1;
 
     // --- optional fields ---
-    const comment     = get(row, 'comment', 4).trim();
-    const orgTypeRaw  = get(row, 'orgType', 1).trim().toLowerCase();
-    const contactName = get(row, 'contactName', 5).trim();
+    const comment      = get(row, 'comment', 4).trim();
+    const orgTypeRaw   = get(row, 'orgType', 1).trim().toLowerCase();
+    const contactName  = get(row, 'contactName', 5).trim();
     const contactTitle = get(row, 'contactTitle', 6).trim();
 
     // --- geographic classification ---
@@ -260,24 +308,26 @@ function parseCSV(csv: string): NpsEntry[] {
 
     // --- dedup ---
     const key = `${cleanOrgName.toLowerCase()}|${npsScore}|${comment.slice(0, 40)}`;
-    if (seen.has(key)) continue;
+    if (seen.has(key)) { stats.skippedDuplicates++; continue; }
     seen.add(key);
 
     entries.push({
       id: Date.now() + i,
       date: new Date().toISOString().split('T')[0],
-      orgName:      cleanOrgName || rawOrgName.trim(),
-      orgType:      orgTypeRaw,
+      orgName:       cleanOrgName || rawOrgName.trim(),
+      orgType:       orgTypeRaw,
       state,
       country,
       npsScore,
       comment,
-      contactName:  contactName  || undefined,
-      contactTitle: contactTitle || undefined,
+      contactName:   contactName  || undefined,
+      contactTitle:  contactTitle || undefined,
     });
+
+    stats.parsed++;
   }
 
-  return entries;
+  return { entries, stats };
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
@@ -298,21 +348,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, entries: store.entries });
     }
 
+    // ── PREVIEW (parse without saving — returns stats for diagnostics) ──────────
+    if (action === 'preview') {
+      const { csv } = body as { csv: string };
+      if (!csv || typeof csv !== 'string') {
+        return NextResponse.json({ error: 'csv field is required.' }, { status: 400 });
+      }
+      const { entries, stats } = parseCSV(csv);
+      return NextResponse.json({ success: true, count: entries.length, stats, sample: entries.slice(0, 5) });
+    }
+
     // ── UPLOAD (replace all entries) ────────────────────────────────────────────
     if (action === 'upload') {
       const { csv } = body as { csv: string };
       if (!csv || typeof csv !== 'string') {
         return NextResponse.json({ error: 'csv field is required.' }, { status: 400 });
       }
-      const entries = parseCSV(csv);
+      const { entries, stats } = parseCSV(csv);
       if (entries.length === 0) {
         return NextResponse.json(
-          { error: 'No valid rows found. Make sure the file has an org name and a score (0–10) on each row.' },
+          { error: 'No valid rows found. Check that the file has an org name column.', stats },
           { status: 400 },
         );
       }
       writeStore({ entries });
-      return NextResponse.json({ success: true, count: entries.length });
+      return NextResponse.json({ success: true, count: entries.length, stats });
     }
 
     // ── APPEND (add without clearing existing) ──────────────────────────────────
@@ -321,17 +381,17 @@ export async function POST(request: NextRequest) {
       if (!csv || typeof csv !== 'string') {
         return NextResponse.json({ error: 'csv field is required.' }, { status: 400 });
       }
-      const newEntries = parseCSV(csv);
+      const { entries: newEntries, stats } = parseCSV(csv);
       if (newEntries.length === 0) {
         return NextResponse.json(
-          { error: 'No valid rows found. Make sure the file has an org name and a score (0–10) on each row.' },
+          { error: 'No valid rows found. Check that the file has an org name column.', stats },
           { status: 400 },
         );
       }
       const store = readStore();
       store.entries = [...store.entries, ...newEntries];
       writeStore(store);
-      return NextResponse.json({ success: true, count: newEntries.length, total: store.entries.length });
+      return NextResponse.json({ success: true, count: newEntries.length, total: store.entries.length, stats });
     }
 
     // ── DELETE ONE ──────────────────────────────────────────────────────────────

@@ -266,6 +266,14 @@ function AdminDashboard({ password }: { password: string }) {
   const [npsUploadResult, setNpsUploadResult] = useState<{ count: number; total?: number } | null>(null);
   const [npsFileName, setNpsFileName] = useState('');
   const npsFileRef = useRef<HTMLInputElement>(null);
+  const [npsParseStats, setNpsParseStats] = useState<{
+    detectedColumns: Record<string, number>;
+    headerFields: string[];
+    totalDataRows: number;
+    skippedNoOrgName: number;
+    skippedDuplicates: number;
+    parsed: number;
+  } | null>(null);
 
   async function loadData() {
     setDataLoading(true);
@@ -426,6 +434,7 @@ function AdminDashboard({ password }: { password: string }) {
     setNpsUploading(true);
     setNpsUploadError('');
     setNpsUploadResult(null);
+    setNpsParseStats(null);
     try {
       const res = await fetch('/api/admin/nps', {
         method: 'POST',
@@ -433,6 +442,7 @@ function AdminDashboard({ password }: { password: string }) {
         body: JSON.stringify({ password, action: npsUploadMode, csv: npsCsvText }),
       });
       const json = await res.json();
+      if (json.stats) setNpsParseStats(json.stats);
       if (json.success) {
         setNpsUploadResult({ count: json.count, total: json.total ?? json.count });
         setNpsCsvText('');
@@ -908,6 +918,7 @@ function AdminDashboard({ password }: { password: string }) {
                           setNpsFileName(file.name);
                           setNpsUploadError('');
                           setNpsUploadResult(null);
+                          setNpsParseStats(null);
                           const reader = new FileReader();
                           reader.onload = (ev) => {
                             setNpsCsvText((ev.target?.result as string) ?? '');
@@ -960,6 +971,27 @@ function AdminDashboard({ password }: { password: string }) {
                           ? ` · ${npsUploadResult.total} total`
                           : ''}
                       </p>
+                    )}
+                    {npsParseStats && (
+                      <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs space-y-1.5">
+                        <p className="font-semibold text-gray-700 dark:text-gray-300">Parse diagnostics</p>
+                        <p className="text-gray-500 dark:text-gray-400">
+                          Total rows in file: <strong>{npsParseStats.totalDataRows}</strong> &nbsp;·&nbsp;
+                          Saved: <span className="text-green-600 dark:text-green-400 font-semibold">{npsParseStats.parsed}</span> &nbsp;·&nbsp;
+                          Skipped (no org name): {npsParseStats.skippedNoOrgName} &nbsp;·&nbsp;
+                          Duplicates removed: {npsParseStats.skippedDuplicates}
+                        </p>
+                        <p className="text-gray-500 dark:text-gray-400">
+                          <span className="font-medium">Detected columns:</span>{' '}
+                          {Object.entries(npsParseStats.detectedColumns)
+                            .map(([k, v]) => `${k}→col${v === -1 ? '?' : v}`)
+                            .join(', ')}
+                        </p>
+                        <p className="text-gray-400 dark:text-gray-500 truncate">
+                          <span className="font-medium">Headers found:</span>{' '}
+                          {npsParseStats.headerFields.join(' · ')}
+                        </p>
+                      </div>
                     )}
                   </div>
 
