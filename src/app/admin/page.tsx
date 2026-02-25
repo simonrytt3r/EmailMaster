@@ -267,6 +267,8 @@ function AdminDashboard({ password }: { password: string }) {
   const [npsUploadResult, setNpsUploadResult] = useState<{ count: number; total?: number } | null>(null);
   const [npsFileName, setNpsFileName] = useState('');
   const npsFileRef = useRef<HTMLInputElement>(null);
+  const [npsSelectedRegion, setNpsSelectedRegion] = useState<string | null>(null);
+  const [npsExpandedRow, setNpsExpandedRow] = useState<number | null>(null);
   const [npsParseStats, setNpsParseStats] = useState<{
     detectedColumns: Record<string, number>;
     headerFields: string[];
@@ -1011,21 +1013,36 @@ function AdminDashboard({ password }: { password: string }) {
                     </p>
                   )}
                   {npsEntries.length > 0 && (() => {
-                    const withComment  = npsEntries.filter((e) => e.comment.trim().length > 0);
-                    const promoters    = npsEntries.filter((e) => e.sentiment === 'Promoter');
-                    const passives     = npsEntries.filter((e) => e.sentiment === 'Passive');
-                    const usEntries    = npsEntries.filter((e) => e.country === 'United States');
+                    const withComment = npsEntries.filter((e) => e.comment.trim().length > 0);
+                    const promoters   = npsEntries.filter((e) => e.sentiment === 'Promoter');
+                    const passives    = npsEntries.filter((e) => e.sentiment === 'Passive');
+                    const usEntries   = npsEntries.filter((e) => e.country === 'United States');
                     const euMap = new Map<string, number>();
                     npsEntries.filter((e) => e.country !== 'United States').forEach((e) => {
                       euMap.set(e.country, (euMap.get(e.country) ?? 0) + 1);
                     });
+
+                    // Apply region filter
+                    const filteredEntries = npsSelectedRegion
+                      ? npsEntries.filter((e) =>
+                          npsSelectedRegion === 'United States'
+                            ? e.country === 'United States'
+                            : e.country === npsSelectedRegion || e.state === npsSelectedRegion,
+                        )
+                      : npsEntries;
+
+                    const toggleRegion = (region: string) =>
+                      setNpsSelectedRegion((prev) => (prev === region ? null : region));
+
                     return (
                       <div className="space-y-4">
-                        {/* Summary row */}
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3 flex-wrap">
+                        {/* Summary / filter row */}
+                        <div className="flex items-center justify-between flex-wrap gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
-                              {npsEntries.length} entries
+                              {npsSelectedRegion
+                                ? `${filteredEntries.length} / ${npsEntries.length} entries`
+                                : `${npsEntries.length} entries`}
                             </span>
                             <span className="text-xs text-gray-400">·</span>
                             <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400">
@@ -1039,14 +1056,31 @@ function AdminDashboard({ password }: { password: string }) {
                               {withComment.length} with quotes
                             </span>
                             <span className="text-xs text-gray-400">·</span>
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400">
+                            {/* Clickable US badge */}
+                            <button
+                              onClick={() => toggleRegion('United States')}
+                              className={`text-xs px-2 py-0.5 rounded-full transition-colors ${npsSelectedRegion === 'United States' ? 'bg-blue-600 text-white' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40'}`}
+                            >
                               US: {usEntries.length}
-                            </span>
-                            {Array.from(euMap.entries()).map(([country, count]) => (
-                              <span key={country} className="text-xs px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400">
+                            </button>
+                            {/* Clickable country badges */}
+                            {Array.from(euMap.entries()).sort((a, b) => b[1] - a[1]).map(([country, count]) => (
+                              <button
+                                key={country}
+                                onClick={() => toggleRegion(country)}
+                                className={`text-xs px-2 py-0.5 rounded-full transition-colors ${npsSelectedRegion === country ? 'bg-purple-600 text-white' : 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 hover:bg-purple-100 dark:hover:bg-purple-900/40'}`}
+                              >
                                 {country}: {count}
-                              </span>
+                              </button>
                             ))}
+                            {npsSelectedRegion && (
+                              <button
+                                onClick={() => setNpsSelectedRegion(null)}
+                                className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
+                              >
+                                Clear filter
+                              </button>
+                            )}
                           </div>
                           <button
                             onClick={handleNpsClear}
@@ -1055,57 +1089,81 @@ function AdminDashboard({ password }: { password: string }) {
                             Clear all
                           </button>
                         </div>
+
                         {/* Table */}
                         <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
-                                <th className="text-left px-3 py-2 font-medium">Sentiment</th>
-                                <th className="text-left px-3 py-2 font-medium">Organisation</th>
-                                <th className="text-left px-3 py-2 font-medium">First Name</th>
-                                <th className="text-left px-3 py-2 font-medium">Last Name</th>
-                                <th className="text-left px-3 py-2 font-medium">Region</th>
-                                <th className="text-left px-3 py-2 font-medium">Comment</th>
+                                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Sentiment</th>
+                                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Organisation</th>
+                                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">First Name</th>
+                                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Last Name</th>
+                                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">Region</th>
+                                <th className="text-left px-3 py-2 font-medium whitespace-nowrap">
+                                  Comment <span className="font-normal text-gray-400">(click to expand)</span>
+                                </th>
                                 <th className="px-3 py-2" />
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                              {npsEntries.map((e) => {
+                              {filteredEntries.map((e) => {
                                 const region = e.country === 'United States'
                                   ? (e.state || 'US')
                                   : e.country;
                                 const isEU = e.country !== 'United States';
+                                const isExpanded = npsExpandedRow === e.id;
                                 const sentimentColor = e.sentiment === 'Promoter'
                                   ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400'
                                   : 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400';
                                 return (
                                   <tr key={e.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                                    <td className="px-3 py-2.5">
+                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                       <span className={`px-1.5 py-0.5 rounded font-medium ${sentimentColor}`}>
                                         {e.sentiment || 'Promoter'}
                                       </span>
                                     </td>
-                                    <td className="px-3 py-2.5 text-gray-800 dark:text-gray-200 font-medium max-w-[160px] truncate">
+                                    <td className="px-3 py-2.5 text-gray-800 dark:text-gray-200 font-medium whitespace-nowrap max-w-[180px] truncate">
                                       {e.orgName}
                                     </td>
-                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">
+                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">
                                       {e.firstName || <span className="text-gray-300 dark:text-gray-600">—</span>}
                                     </td>
-                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">
+                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 whitespace-nowrap">
                                       {e.lastName || <span className="text-gray-300 dark:text-gray-600">—</span>}
                                     </td>
-                                    <td className="px-3 py-2.5">
-                                      <span className={`px-1.5 py-0.5 rounded font-medium ${isEU ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'}`}>
+                                    <td className="px-3 py-2.5 whitespace-nowrap">
+                                      {/* Region badge — also clickable to filter */}
+                                      <button
+                                        onClick={() => toggleRegion(e.country === 'United States' ? 'United States' : e.country)}
+                                        className={`px-1.5 py-0.5 rounded font-medium transition-colors ${
+                                          isEU
+                                            ? npsSelectedRegion === e.country
+                                              ? 'bg-purple-600 text-white'
+                                              : 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400 hover:bg-purple-200 dark:hover:bg-purple-900/50'
+                                            : npsSelectedRegion === 'United States'
+                                              ? 'bg-blue-600 text-white'
+                                              : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-900/50'
+                                        }`}
+                                      >
                                         {region}
-                                      </span>
+                                      </button>
                                     </td>
-                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 max-w-[280px]">
-                                      {e.comment
-                                        ? <span className="line-clamp-2">{e.comment}</span>
-                                        : <span className="text-gray-300 dark:text-gray-600 italic">no comment</span>
-                                      }
+                                    {/* Comment cell — click to expand/collapse */}
+                                    <td
+                                      className="px-3 py-2.5 text-gray-600 dark:text-gray-400 cursor-pointer select-none"
+                                      style={{ minWidth: '240px', maxWidth: '480px' }}
+                                      onClick={() => setNpsExpandedRow(isExpanded ? null : e.id)}
+                                    >
+                                      {e.comment ? (
+                                        <span className={isExpanded ? 'whitespace-pre-wrap break-words' : 'line-clamp-2 break-words'}>
+                                          {e.comment}
+                                        </span>
+                                      ) : (
+                                        <span className="text-gray-300 dark:text-gray-600 italic">no comment</span>
+                                      )}
                                     </td>
-                                    <td className="px-3 py-2.5">
+                                    <td className="px-3 py-2.5 whitespace-nowrap">
                                       <button
                                         onClick={() => handleNpsDelete(e.id)}
                                         className="text-gray-400 hover:text-red-500 transition-colors text-xs"
