@@ -80,12 +80,13 @@ interface NpsEntryLocal {
   date: string;
   orgName: string;
   orgType: string;
+  sentiment: string;
   state: string;
   country: string;
   npsScore: number;
   comment: string;
-  contactName?: string;
-  contactTitle?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 interface FetchedUpdates {
@@ -271,6 +272,7 @@ function AdminDashboard({ password }: { password: string }) {
     headerFields: string[];
     totalDataRows: number;
     skippedNoOrgName: number;
+    skippedDetractors: number;
     skippedDuplicates: number;
     parsed: number;
   } | null>(null);
@@ -976,10 +978,11 @@ function AdminDashboard({ password }: { password: string }) {
                       <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-xs space-y-1.5">
                         <p className="font-semibold text-gray-700 dark:text-gray-300">Parse diagnostics</p>
                         <p className="text-gray-500 dark:text-gray-400">
-                          Total rows in file: <strong>{npsParseStats.totalDataRows}</strong> &nbsp;·&nbsp;
+                          Total rows: <strong>{npsParseStats.totalDataRows}</strong> &nbsp;·&nbsp;
                           Saved: <span className="text-green-600 dark:text-green-400 font-semibold">{npsParseStats.parsed}</span> &nbsp;·&nbsp;
-                          Skipped (no org name): {npsParseStats.skippedNoOrgName} &nbsp;·&nbsp;
-                          Duplicates removed: {npsParseStats.skippedDuplicates}
+                          Detractors excluded: {npsParseStats.skippedDetractors} &nbsp;·&nbsp;
+                          No org name: {npsParseStats.skippedNoOrgName} &nbsp;·&nbsp;
+                          Duplicates: {npsParseStats.skippedDuplicates}
                         </p>
                         <p className="text-gray-500 dark:text-gray-400">
                           <span className="font-medium">Detected columns:</span>{' '}
@@ -1008,8 +1011,10 @@ function AdminDashboard({ password }: { password: string }) {
                     </p>
                   )}
                   {npsEntries.length > 0 && (() => {
-                    const withComment = npsEntries.filter((e) => e.comment.trim().length > 0);
-                    const usEntries   = npsEntries.filter((e) => e.country === 'United States');
+                    const withComment  = npsEntries.filter((e) => e.comment.trim().length > 0);
+                    const promoters    = npsEntries.filter((e) => e.sentiment === 'Promoter');
+                    const passives     = npsEntries.filter((e) => e.sentiment === 'Passive');
+                    const usEntries    = npsEntries.filter((e) => e.country === 'United States');
                     const euMap = new Map<string, number>();
                     npsEntries.filter((e) => e.country !== 'United States').forEach((e) => {
                       euMap.set(e.country, (euMap.get(e.country) ?? 0) + 1);
@@ -1021,6 +1026,13 @@ function AdminDashboard({ password }: { password: string }) {
                           <div className="flex items-center gap-3 flex-wrap">
                             <span className="text-sm font-semibold text-gray-700 dark:text-gray-300">
                               {npsEntries.length} entries
+                            </span>
+                            <span className="text-xs text-gray-400">·</span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400">
+                              Promoters: {promoters.length}
+                            </span>
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-50 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400">
+                              Passives: {passives.length}
                             </span>
                             <span className="text-xs text-gray-400">·</span>
                             <span className="text-xs text-gray-500 dark:text-gray-400">
@@ -1048,10 +1060,11 @@ function AdminDashboard({ password }: { password: string }) {
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="bg-gray-50 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                                <th className="text-left px-3 py-2 font-medium">Sentiment</th>
                                 <th className="text-left px-3 py-2 font-medium">Organisation</th>
-                                <th className="text-left px-3 py-2 font-medium">Type</th>
+                                <th className="text-left px-3 py-2 font-medium">First Name</th>
+                                <th className="text-left px-3 py-2 font-medium">Last Name</th>
                                 <th className="text-left px-3 py-2 font-medium">Region</th>
-                                <th className="text-center px-3 py-2 font-medium">NPS</th>
                                 <th className="text-left px-3 py-2 font-medium">Comment</th>
                                 <th className="px-3 py-2" />
                               </tr>
@@ -1062,22 +1075,28 @@ function AdminDashboard({ password }: { password: string }) {
                                   ? (e.state || 'US')
                                   : e.country;
                                 const isEU = e.country !== 'United States';
+                                const sentimentColor = e.sentiment === 'Promoter'
+                                  ? 'bg-green-50 dark:bg-green-950/30 text-green-700 dark:text-green-400'
+                                  : 'bg-yellow-50 dark:bg-yellow-950/30 text-yellow-700 dark:text-yellow-400';
                                 return (
                                   <tr key={e.id} className="bg-white dark:bg-gray-900 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                                    <td className="px-3 py-2.5">
+                                      <span className={`px-1.5 py-0.5 rounded font-medium ${sentimentColor}`}>
+                                        {e.sentiment || 'Promoter'}
+                                      </span>
+                                    </td>
                                     <td className="px-3 py-2.5 text-gray-800 dark:text-gray-200 font-medium max-w-[160px] truncate">
                                       {e.orgName}
                                     </td>
-                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 capitalize">
-                                      {e.orgType || <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">
+                                      {e.firstName || <span className="text-gray-300 dark:text-gray-600">—</span>}
+                                    </td>
+                                    <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400">
+                                      {e.lastName || <span className="text-gray-300 dark:text-gray-600">—</span>}
                                     </td>
                                     <td className="px-3 py-2.5">
-                                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${isEU ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'}`}>
+                                      <span className={`px-1.5 py-0.5 rounded font-medium ${isEU ? 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-400' : 'bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-400'}`}>
                                         {region}
-                                      </span>
-                                    </td>
-                                    <td className="px-3 py-2.5 text-center">
-                                      <span className={`font-semibold tabular-nums ${e.npsScore >= 9 ? 'text-green-600 dark:text-green-400' : e.npsScore >= 7 ? 'text-yellow-600 dark:text-yellow-400' : 'text-red-500'}`}>
-                                        {e.npsScore}
                                       </span>
                                     </td>
                                     <td className="px-3 py-2.5 text-gray-600 dark:text-gray-400 max-w-[280px]">

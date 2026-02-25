@@ -48,6 +48,26 @@ const EU_COUNTRIES: Record<string, string> = {
 const AMBIGUOUS_CODES = new Set(['DE', 'IN', 'MT']);
 
 /**
+ * Non-standard / informal country codes used in some exports.
+ * Checked before the standard ISO maps so they always win.
+ * Keys are stored UPPERCASE.
+ */
+const CUSTOM_COUNTRY_CODES: Record<string, string> = {
+  FRA: 'France',
+  GER: 'Germany',
+  IRE: 'Ireland',
+  NLD: 'Netherlands',
+  SWE: 'Sweden',
+  UK:  'United Kingdom',
+  ENG: 'United Kingdom',
+  SCO: 'Scotland',
+  WAL: 'Wales',
+  AUS: 'Australia',
+  NZL: 'New Zealand',
+  CAN: 'Canada',
+};
+
+/**
  * Minimal language detection using stopword frequency.
  * Returns an ISO 639-1 language code, defaulting to 'en'.
  */
@@ -97,6 +117,9 @@ function classifyLocation(
   if (!code) return { country: 'United States', state: '' };
 
   const upper = code.toUpperCase();
+
+  // Check non-standard / informal codes first — they are always countries, never US states
+  if (CUSTOM_COUNTRY_CODES[upper]) return { country: CUSTOM_COUNTRY_CODES[upper], state: '' };
 
   if (AMBIGUOUS_CODES.has(upper)) {
     const orgUpper = orgName.toUpperCase();
@@ -152,20 +175,23 @@ function detectColumns(headers: string[]): Record<string, number> {
   };
 
   return {
+    sentiment: find('sentiment', 'nps category', 'promoter type', 'category', 'nps type', 'respondent type'),
     orgName: find(
       'org name', 'organization name', 'company name', 'club name',
       'school name', 'account name', 'customer name',
       'organization', 'company', 'club', 'school', 'account', 'customer',
     ),
-    orgType: find('org type', 'account type', 'organization type', 'type', 'category', 'segment'),
-    npsScore: find('nps score', 'nps rating', 'score', 'nps', 'rating', 'net promoter'),
+    orgType: find('org type', 'account type', 'organization type', 'type', 'segment'),
+    npsScore: find('nps score', 'nps rating', 'score', 'rating', 'net promoter'),
     comment: find(
       'last nps survey comment', 'nps survey comment', 'nps comment',
       'survey comment', 'comment', 'feedback', 'response', 'verbatim',
       'message', 'notes', 'answer',
     ),
-    contactName: find('contact name', 'respondent name', 'full name', 'first name', 'name'),
-    contactTitle: find('job title', 'contact title', 'title', 'role', 'position'),
+    state: find('state', 'region', 'province', 'country code', 'location code'),
+    firstName: find('first name', 'firstname', 'given name', 'forename'),
+    lastName: find('last name', 'lastname', 'surname', 'family name'),
+    contactName: find('contact name', 'respondent name', 'full name', 'name'),
   };
 }
 
@@ -175,6 +201,7 @@ export interface ParseStats {
   totalDataRows: number;
   skippedEmpty: number;
   skippedNoOrgName: number;
+  skippedDetractors: number;
   skippedDuplicates: number;
   parsed: number;
 }
@@ -261,7 +288,7 @@ function parseCSV(csv: string): { entries: NpsEntry[]; stats: ParseStats } {
   }
 
   const rows = tokenise(text);
-  if (rows.length < 2) return { entries: [], stats: { detectedColumns: {}, headerFields: [], totalDataRows: 0, skippedEmpty: 0, skippedNoOrgName: 0, skippedDuplicates: 0, parsed: 0 } };
+  if (rows.length < 2) return { entries: [], stats: { detectedColumns: {}, headerFields: [], totalDataRows: 0, skippedEmpty: 0, skippedNoOrgName: 0, skippedDetractors: 0, skippedDuplicates: 0, parsed: 0 } };
 
   // 4. Detect column positions from header row
   const headerFields = rows[0];
@@ -280,6 +307,7 @@ function parseCSV(csv: string): { entries: NpsEntry[]; stats: ParseStats } {
     totalDataRows: rows.length - 1,
     skippedEmpty: 0,
     skippedNoOrgName: 0,
+    skippedDetractors: 0,
     skippedDuplicates: 0,
     parsed: 0,
   };
@@ -287,41 +315,52 @@ function parseCSV(csv: string): { entries: NpsEntry[]; stats: ParseStats } {
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i];
 
-    // --- org name (required) ---
-    const rawOrgName = get(row, 'orgName', 0);
+    // --- sentiment (Promoter / Passive / Detractor) — col 0 fallback ---
+    const sentimentRaw = get(row, 'sentiment', 0).trim();
+    const sentiment = sentimentRaw.charAt(0).toUpperCase() + sentimentRaw.slice(1).toLowerCase();
+
+    // Skip Detractors — negative feedback has no use in social proof emails
+    if (sentiment === 'Detractor') { stats.skippedDetractors++; continue; }
+
+    // --- org name (required) — col 2 fallback (col 0=sentiment, col 1=state, col 2=org) ---
+    const rawOrgName = get(row, 'orgName', 2);
     if (!rawOrgName) { stats.skippedNoOrgName++; continue; }
 
     // --- NPS score (optional — store -1 when not found) ---
     const npsScoreRaw = get(row, 'npsScore', 3);
-    const parsed = parseInt(npsScoreRaw, 10);
-    const npsScore = (!isNaN(parsed) && parsed >= 0 && parsed <= 10) ? parsed : -1;
+    const parsedScore = parseInt(npsScoreRaw, 10);
+    const npsScore = (!isNaN(parsedScore) && parsedScore >= 0 && parsedScore <= 10) ? parsedScore : -1;
 
     // --- optional fields ---
-    const comment      = get(row, 'comment', 4).trim();
-    const orgTypeRaw   = get(row, 'orgType', 1).trim().toLowerCase();
-    const contactName  = get(row, 'contactName', 5).trim();
-    const contactTitle = get(row, 'contactTitle', 6).trim();
+    const comment    = get(row, 'comment', 3).trim();
+    const orgTypeRaw = get(row, 'orgType', -1).trim().toLowerCase();
+    const firstName  = get(row, 'firstName', 4).trim();
+    const lastName   = get(row, 'lastName', 5).trim();
 
     // --- geographic classification ---
-    const { code, name: cleanOrgName } = extractBracketCode(rawOrgName);
+    // Primary: bracket code in org name. Secondary: col 1 (state column).
+    const { code: bracketCode, name: cleanOrgName } = extractBracketCode(rawOrgName);
+    const stateColRaw = get(row, 'state', 1).trim();
+    const code = bracketCode || stateColRaw;
     const { country, state } = classifyLocation(code, cleanOrgName, comment);
 
     // --- dedup ---
-    const key = `${cleanOrgName.toLowerCase()}|${npsScore}|${comment.slice(0, 40)}`;
+    const key = `${cleanOrgName.toLowerCase()}|${comment.slice(0, 40)}`;
     if (seen.has(key)) { stats.skippedDuplicates++; continue; }
     seen.add(key);
 
     entries.push({
       id: Date.now() + i,
       date: new Date().toISOString().split('T')[0],
-      orgName:       cleanOrgName || rawOrgName.trim(),
-      orgType:       orgTypeRaw,
+      orgName:   cleanOrgName || rawOrgName.trim(),
+      orgType:   orgTypeRaw,
+      sentiment: sentiment || 'Promoter',
       state,
       country,
       npsScore,
       comment,
-      contactName:   contactName  || undefined,
-      contactTitle:  contactTitle || undefined,
+      firstName: firstName || undefined,
+      lastName:  lastName  || undefined,
     });
 
     stats.parsed++;

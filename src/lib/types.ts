@@ -156,6 +156,8 @@ export interface NpsEntry {
   date: string;
   orgName: string;
   orgType: string;
+  /** 'Promoter', 'Passive', or 'Detractor' — Detractors are excluded at parse time */
+  sentiment: string;
   /** 2-letter US state code (e.g. 'FL') — empty string for non-US entries */
   state: string;
   /** 'United States' for US entries; European country name (e.g. 'Germany') for EU entries */
@@ -163,8 +165,8 @@ export interface NpsEntry {
   npsScore: number;
   /** May be empty — entries with no comment are stored but excluded from quote injection */
   comment: string;
-  contactName?: string;
-  contactTitle?: string;
+  firstName?: string;
+  lastName?: string;
 }
 
 export interface NpsStore {

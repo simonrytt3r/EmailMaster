@@ -53,20 +53,27 @@ export function findMatchingQuotes(
   stateOrCountry: string | undefined,
 ): NpsMatchResult {
   const store = readNpsStore();
-  const withComment = store.entries.filter((e) => e.comment.trim().length > 0);
+  // Only use entries that have a comment AND are Promoters or Passives
+  const withComment = store.entries.filter(
+    (e) => e.comment.trim().length > 0 && e.sentiment !== 'Detractor',
+  );
 
   if (withComment.length === 0 || (!orgType && !stateOrCountry)) {
     return { entries: [], matchType: 'none' };
   }
 
   const normType = normalise(orgType ?? '');
-  const byScore  = (a: NpsEntry, b: NpsEntry) => b.npsScore - a.npsScore;
+  // Sort: Promoters first, then by NPS score descending
+  const byQuality = (a: NpsEntry, b: NpsEntry) => {
+    const promoterScore = (e: NpsEntry) => (e.sentiment === 'Promoter' ? 1 : 0);
+    return promoterScore(b) - promoterScore(a) || b.npsScore - a.npsScore;
+  };
 
   // Tier 1: org type + location
   if (normType && stateOrCountry) {
     const exact = withComment
       .filter((e) => normalise(e.orgType) === normType && locationMatches(e, stateOrCountry))
-      .sort(byScore)
+      .sort(byQuality)
       .slice(0, MAX_QUOTES);
     if (exact.length > 0) return { entries: exact, matchType: 'exact' };
   }
@@ -75,7 +82,7 @@ export function findMatchingQuotes(
   if (normType) {
     const byType = withComment
       .filter((e) => normalise(e.orgType) === normType)
-      .sort(byScore)
+      .sort(byQuality)
       .slice(0, MAX_QUOTES);
     if (byType.length > 0) return { entries: byType, matchType: 'orgType' };
   }
@@ -84,7 +91,7 @@ export function findMatchingQuotes(
   if (stateOrCountry) {
     const byLoc = withComment
       .filter((e) => locationMatches(e, stateOrCountry))
-      .sort(byScore)
+      .sort(byQuality)
       .slice(0, MAX_QUOTES);
     if (byLoc.length > 0) return { entries: byLoc, matchType: 'location' };
   }
@@ -111,14 +118,15 @@ export function formatQuotesForPrompt(match: NpsMatchResult): string {
       ? e.state.toUpperCase()
       : (e.country && e.country !== 'United States' ? e.country : '');
 
+    const contactName = [e.firstName, e.lastName].filter(Boolean).join(' ');
     const who = [
-      e.contactTitle || null,
+      contactName || null,
       e.orgName,
       location ? `(${location})` : null,
     ]
       .filter(Boolean)
       .join(', ');
-    return `- "${e.comment.trim()}" — ${who} [NPS ${e.npsScore}]`;
+    return `- "${e.comment.trim()}" — ${who}`;
   });
 
   return `## SOCIAL PROOF FROM SIMILAR CUSTOMERS
