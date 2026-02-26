@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { getAnthropicClient, parseJSON } from '@/lib/anthropic';
-import { SYSTEM_PROMPT, buildAnalysisPrompt } from '@/lib/prompts';
+import { buildSystemPrompt, buildAnalysisPrompt } from '@/lib/prompts';
 import { AnalysisResult, AnalyzeRequest } from '@/lib/types';
 
 export const runtime = 'nodejs';
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
           const messageStream = client.messages.stream({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 4096,
-            system: SYSTEM_PROMPT,
+            system: buildSystemPrompt(),
             messages: [{ role: 'user', content: userPrompt }],
           });
 
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
               const retryStream = client.messages.stream({
                 model: 'claude-sonnet-4-20250514',
                 max_tokens: 4096,
-                system: SYSTEM_PROMPT,
+                system: buildSystemPrompt(),
                 messages: [{ role: 'user', content: retryPrompt }],
               });
 

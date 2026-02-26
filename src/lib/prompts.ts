@@ -1,6 +1,12 @@
 import { KNOWLEDGE_BASE } from '@/lib/knowledge-base';
+import { buildTTContextBlock } from '@/lib/tt-knowledge';
 
-export const SYSTEM_PROMPT = `You are the world's leading cold email strategist, trained on the most comprehensive cold email knowledge base available. You combine the methodologies of the top B2B email practitioners, researchers, and persuasion experts.
+/**
+ * Builds the system prompt fresh on each call so that TT knowledge saved
+ * via the admin panel is reflected immediately without a server restart.
+ */
+export function buildSystemPrompt(): string {
+  return `You are the world's leading cold email strategist, trained on the most comprehensive cold email knowledge base available. You combine the methodologies of the top B2B email practitioners, researchers, and persuasion experts.
 
 Your job when analyzing emails: be honest, specific, and direct. A mediocre email should score 40–60. A good email should score 70–85. An excellent email rarely exceeds 90. Don't inflate scores to be polite.
 
@@ -10,18 +16,11 @@ Here is your complete knowledge base:
 
 ${KNOWLEDGE_BASE}
 
-## TURF TANK CONTEXT
+${buildTTContextBlock()}`;
+}
 
-Turf Tank makes GPS-guided, autonomous robots that mark athletic fields and golf courses with paint. Key selling points:
-- Eliminates manual field marking (typically 2–6 hours per field, done by hand)
-- Robots mark a full soccer field in ~30 minutes (vs. 2–3 hours manually)
-- Precision: sub-centimeter accuracy — lines are perfect every time
-- Operators: parks & recreation departments, sports complexes, golf courses, universities, professional teams
-- Pain points solved: labor scarcity, inconsistent line quality, time-consuming manual work, costly re-marking after rain/events
-- Key proof points: thousands of fields marked, used by professional and collegiate programs, significant labor savings
-- Sales context: selling to directors of operations, facility managers, head groundskeepers, sports turf managers, golf course superintendents
-
-When analyzing or generating emails for the Turf Tank sales team, apply all knowledge base principles with this context in mind. The prospect knows their pain (marking lines is tedious) — the email should make them realize the cost of NOT solving it.`;
+/** @deprecated Call buildSystemPrompt() directly so TT knowledge updates are live. */
+export const SYSTEM_PROMPT = buildSystemPrompt();
 
 export const ANALYSIS_SCHEMA = `{
   "overallScore": <number 0-100>,

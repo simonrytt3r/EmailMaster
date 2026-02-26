@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAnthropicClient } from '@/lib/anthropic';
-import { SYSTEM_PROMPT } from '@/lib/prompts';
+import { buildSystemPrompt } from '@/lib/prompts';
 
 export const runtime = 'nodejs';
 
@@ -48,7 +48,7 @@ Return ONLY the JSON object. No markdown, no explanatory text.`;
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5-20250929',
       max_tokens: 1024,
-      system: SYSTEM_PROMPT,
+      system: buildSystemPrompt(),
       messages: [{ role: 'user', content: prompt }],
     });
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAnthropicClient, parseJSON } from '@/lib/anthropic';
-import { SYSTEM_PROMPT, buildSequencePrompt } from '@/lib/prompts';
+import { buildSystemPrompt, buildSequencePrompt } from '@/lib/prompts';
+import { getSportProofPoints } from '@/lib/tt-knowledge';
 import { SequenceRequest, SequenceResult } from '@/lib/types';
 import { findMatchingQuotes, formatQuotesForPrompt } from '@/lib/nps-quotes';
 
@@ -20,7 +21,9 @@ export async function POST(request: NextRequest) {
     const client = getAnthropicClient();
     const npsMatch = findMatchingQuotes(body.orgType, body.prospectState);
     const socialProofQuotes = formatQuotesForPrompt(npsMatch) || undefined;
-    const userPrompt = buildSequencePrompt({ ...body, socialProofQuotes });
+    let userPrompt = buildSequencePrompt({ ...body, socialProofQuotes });
+    const sportContext = getSportProofPoints(body.industry);
+    if (sportContext) userPrompt += sportContext;
 
     const encoder = new TextEncoder();
     let buffer = '';
@@ -31,7 +34,7 @@ export async function POST(request: NextRequest) {
           const messageStream = client.messages.stream({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 8192,
-            system: SYSTEM_PROMPT,
+            system: buildSystemPrompt(),
             messages: [{ role: 'user', content: userPrompt }],
           });
 
@@ -64,7 +67,7 @@ export async function POST(request: NextRequest) {
             const retryStream = client.messages.stream({
               model: 'claude-sonnet-4-20250514',
               max_tokens: 8192,
-              system: SYSTEM_PROMPT,
+              system: buildSystemPrompt(),
               messages: [{ role: 'user', content: retryPrompt }],
             });
 

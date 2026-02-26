@@ -291,6 +291,26 @@ function AdminDashboard({ password }: { password: string }) {
   const [cacheLoading, setCacheLoading] = useState(false);
   const [cacheSaving, setCacheSaving] = useState(false);
 
+  // ── TT Knowledge ────────────────────────────────────────────────────────────
+  type SportRow = {
+    sport: string; manualTimeMin: number; robotTimeMin: number;
+    timeSavedMin: number; timeSavedPct: number; paintSavingsPct: number;
+    fieldsPerDayManual: number; fieldsPerDayRobot: number; notes: string;
+  };
+  const [ttOpen, setTtOpen] = useState(false);
+  const [ttTab, setTtTab] = useState<'narrative' | 'sports'>('narrative');
+  const [ttNarrative, setTtNarrative] = useState('');
+  const [ttSports, setTtSports] = useState<SportRow[]>([]);
+  const [ttUpdatedAt, setTtUpdatedAt] = useState('');
+  const [ttLoading, setTtLoading] = useState(false);
+  const [ttNarrativeSaving, setTtNarrativeSaving] = useState(false);
+  const [ttNarrativeSaved, setTtNarrativeSaved] = useState(false);
+  const [ttCsvText, setTtCsvText] = useState('');
+  const [ttCsvParsed, setTtCsvParsed] = useState<SportRow[] | null>(null);
+  const [ttCsvError, setTtCsvError] = useState('');
+  const [ttSportsSaving, setTtSportsSaving] = useState(false);
+  const [ttSportsSaved, setTtSportsSaved] = useState(false);
+
   async function loadCacheData() {
     setCacheLoading(true);
     try {
@@ -557,6 +577,128 @@ function AdminDashboard({ password }: { password: string }) {
     }
   }
 
+  // ── TT Knowledge functions ────────────────────────────────────────────────
+
+  async function loadTTKnowledge() {
+    setTtLoading(true);
+    try {
+      const res = await fetch('/api/admin/tt-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'read' }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setTtNarrative(json.narrative ?? '');
+        setTtSports(json.sports ?? []);
+        setTtUpdatedAt(json.updatedAt ?? '');
+      }
+    } catch { /* silent */ }
+    finally { setTtLoading(false); }
+  }
+
+  async function saveTTNarrative() {
+    setTtNarrativeSaving(true);
+    setTtNarrativeSaved(false);
+    try {
+      const res = await fetch('/api/admin/tt-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'save-narrative', narrative: ttNarrative }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setTtNarrativeSaved(true);
+        setTtUpdatedAt(json.updatedAt ?? '');
+        setTimeout(() => setTtNarrativeSaved(false), 3000);
+      }
+    } catch { /* silent */ }
+    finally { setTtNarrativeSaving(false); }
+  }
+
+  async function saveTTSports(sports: SportRow[]) {
+    setTtSportsSaving(true);
+    setTtSportsSaved(false);
+    try {
+      const res = await fetch('/api/admin/tt-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'save-sports', sports }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setTtSports(sports);
+        setTtCsvParsed(null);
+        setTtCsvText('');
+        setTtSportsSaved(true);
+        setTtUpdatedAt(json.updatedAt ?? '');
+        setTimeout(() => setTtSportsSaved(false), 3000);
+      }
+    } catch { /* silent */ }
+    finally { setTtSportsSaving(false); }
+  }
+
+  function parseSportsCSV(csvText: string) {
+    setTtCsvError('');
+    setTtCsvParsed(null);
+    const lines = csvText.trim().split('\n').filter(Boolean);
+    if (lines.length < 2) {
+      setTtCsvError('CSV must have a header row and at least one data row.');
+      return;
+    }
+    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const headers = lines[0].split(',').map(h => normalize(h.trim()));
+    const findCol = (...candidates: string[]): number => {
+      for (const c of candidates) {
+        const norm = normalize(c);
+        const idx = headers.findIndex(h => h === norm);
+        if (idx !== -1) return idx;
+      }
+      for (const c of candidates) {
+        const norm = normalize(c);
+        const idx = headers.findIndex(h => h.includes(norm));
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+    const colSport        = findCol('sport', 'sport name', 'sportname');
+    const colManual       = findCol('manual time', 'manual time min', 'time manual', 'manualmin');
+    const colRobot        = findCol('robot time', 'robot time min', 'tt time', 'turftank time', 'robotmin');
+    const colSavedMin     = findCol('time saved min', 'timesavedmin', 'minutes saved', 'savedmin');
+    const colSavedPct     = findCol('time saved %', 'time saved pct', 'timesavedpct', 'time reduction', 'reduction');
+    const colPaint        = findCol('paint savings', 'paintsavings', 'paint %', 'paint reduction');
+    const colManualFields = findCol('fields per day manual', 'fieldsperdaymanual', 'manual fields per day', 'fieldsmanual');
+    const colRobotFields  = findCol('fields per day robot', 'fieldsperdayrobot', 'robot fields per day', 'fieldsrobot', 'tt fields');
+    const colNotes        = findCol('notes', 'comments', 'additional notes');
+    if (colSport === -1) {
+      setTtCsvError('Could not find a "Sport" column. Make sure the header row has a column named "Sport".');
+      return;
+    }
+    const getNum = (cols: string[], idx: number) =>
+      idx === -1 ? 0 : parseFloat(cols[idx]?.trim() ?? '') || 0;
+    const getStr = (cols: string[], idx: number) =>
+      idx === -1 ? '' : (cols[idx]?.trim() ?? '');
+    const entries: SportRow[] = lines.slice(1).map(line => {
+      const cols = line.split(',');
+      return {
+        sport: getStr(cols, colSport),
+        manualTimeMin: getNum(cols, colManual),
+        robotTimeMin: getNum(cols, colRobot),
+        timeSavedMin: getNum(cols, colSavedMin),
+        timeSavedPct: getNum(cols, colSavedPct),
+        paintSavingsPct: getNum(cols, colPaint),
+        fieldsPerDayManual: getNum(cols, colManualFields),
+        fieldsPerDayRobot: getNum(cols, colRobotFields),
+        notes: getStr(cols, colNotes),
+      };
+    }).filter(e => e.sport);
+    if (entries.length === 0) {
+      setTtCsvError('No valid sport rows found. Check that each data row has a Sport value.');
+      return;
+    }
+    setTtCsvParsed(entries);
+  }
+
   const appliedCount = Object.values(itemStates).filter((s) => s === 'applied').length;
 
   return (
@@ -622,6 +764,223 @@ function AdminDashboard({ password }: { password: string }) {
                 </div>
                 <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">Replies logged</div>
               </div>
+            </div>
+
+            {/* ── TT Knowledge ───────────────────────────────────────────── */}
+            <div className="bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-800 overflow-hidden">
+              <button
+                onClick={() => {
+                  const opening = !ttOpen;
+                  setTtOpen(opening);
+                  if (opening && !ttLoading && !ttNarrative && ttSports.length === 0) {
+                    loadTTKnowledge();
+                  }
+                }}
+                className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+              >
+                <div className="text-left">
+                  <h2 className="font-semibold">Turf Tank Knowledge</h2>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    Sales intelligence injected into every generation — personas, proof points, objections, sport-specific numbers.
+                    {ttUpdatedAt && ` · Updated ${new Date(ttUpdatedAt).toLocaleDateString()}`}
+                  </p>
+                </div>
+                <span className="text-gray-400 text-sm shrink-0 ml-4">{ttOpen ? '▲' : '▼'}</span>
+              </button>
+
+              {ttOpen && (
+                <div className="border-t border-gray-200 dark:border-gray-800">
+                  {ttLoading && (
+                    <p className="text-sm text-gray-400 py-6 text-center">Loading TT knowledge…</p>
+                  )}
+                  {!ttLoading && (
+                    <>
+                      {/* Tab bar */}
+                      <div className="flex border-b border-gray-200 dark:border-gray-800">
+                        {(['narrative', 'sports'] as const).map((tab) => (
+                          <button
+                            key={tab}
+                            onClick={() => setTtTab(tab)}
+                            className={`px-5 py-3 text-sm font-medium border-b-2 transition-colors ${
+                              ttTab === tab
+                                ? 'border-green-500 text-green-600 dark:text-green-400'
+                                : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                            }`}
+                          >
+                            {tab === 'narrative'
+                              ? 'Sales Intelligence'
+                              : `Sports Data${ttSports.length > 0 ? ` (${ttSports.length})` : ''}`}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Sales Intelligence tab */}
+                      {ttTab === 'narrative' && (
+                        <div className="px-6 py-5 space-y-4">
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
+                            Write anything Claude should know about Turf Tank — personas, objection handling, named customers, proof points, pricing context, competitive positioning. Markdown supported. This is appended to every system prompt.
+                          </p>
+                          <textarea
+                            value={ttNarrative}
+                            onChange={(e) => setTtNarrative(e.target.value)}
+                            rows={20}
+                            placeholder={`## Buyer Personas\n\n### Parks & Rec Director\n- Manages X fields...\n\n## Proof Points\n\n- City of [X] saved 8 hours/week...\n\n## Objection Handling\n\n- "Too expensive" → ROI pays back in Y months...`}
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/40 font-mono leading-relaxed resize-none"
+                          />
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-400">
+                              {ttNarrative.length.toLocaleString()} chars · {ttNarrative.trim().split(/\s+/).filter(Boolean).length.toLocaleString()} words
+                            </span>
+                            <button
+                              onClick={saveTTNarrative}
+                              disabled={ttNarrativeSaving}
+                              className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                ttNarrativeSaved
+                                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                  : 'bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white'
+                              }`}
+                            >
+                              {ttNarrativeSaving ? 'Saving…' : ttNarrativeSaved ? '✓ Saved' : 'Save to Knowledge Base'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Sports Data tab */}
+                      {ttTab === 'sports' && (
+                        <div className="px-6 py-5 space-y-5">
+                          <div className="space-y-2">
+                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                              Paste your CSV from Google Sheets. Claude will use these exact numbers when generating emails for a specific sport. Expected columns:
+                            </p>
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 overflow-x-auto whitespace-nowrap">
+                              Sport, Manual Time (min), Robot Time (min), Time Saved (min), Time Saved (%), Paint Savings (%), Fields Per Day (Manual), Fields Per Day (Robot), Notes
+                            </div>
+                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                              Column names are flexible — auto-detected by keyword. Only the &ldquo;Sport&rdquo; column is required. Omit any columns you don&apos;t have data for.
+                            </p>
+                          </div>
+
+                          <div className="space-y-2">
+                            <textarea
+                              value={ttCsvText}
+                              onChange={(e) => setTtCsvText(e.target.value)}
+                              rows={8}
+                              placeholder="Paste CSV here…"
+                              className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/40 font-mono resize-none"
+                            />
+                            <div className="flex gap-2 flex-wrap">
+                              <button
+                                onClick={() => parseSportsCSV(ttCsvText)}
+                                disabled={!ttCsvText.trim()}
+                                className="px-4 py-2 rounded-lg bg-gray-800 dark:bg-gray-700 hover:bg-gray-900 dark:hover:bg-gray-600 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+                              >
+                                Preview Import
+                              </button>
+                              {ttCsvParsed && (
+                                <button
+                                  onClick={() => saveTTSports(ttCsvParsed)}
+                                  disabled={ttSportsSaving}
+                                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                    ttSportsSaved
+                                      ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                      : 'bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white'
+                                  }`}
+                                >
+                                  {ttSportsSaving ? 'Saving…' : ttSportsSaved ? `✓ ${ttCsvParsed.length} sports saved` : `Save ${ttCsvParsed.length} sports`}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+
+                          {ttCsvError && (
+                            <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-3">{ttCsvError}</p>
+                          )}
+
+                          {/* Preview table */}
+                          {ttCsvParsed && ttCsvParsed.length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+                                Preview — {ttCsvParsed.length} sports detected
+                              </h4>
+                              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                                <table className="min-w-full text-xs">
+                                  <thead className="bg-gray-50 dark:bg-gray-800">
+                                    <tr>
+                                      {['Sport', 'Manual (min)', 'Robot (min)', 'Saved (min)', 'Saved (%)', 'Paint (%)', 'Fields/day M', 'Fields/day R', 'Notes'].map(col => (
+                                        <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    {ttCsvParsed.map((row, i) => (
+                                      <tr key={i} className="bg-white dark:bg-gray-900">
+                                        <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{row.sport}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.manualTimeMin || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.robotTimeMin || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedMin || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedPct || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.paintSavingsPct || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.fieldsPerDayManual || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.fieldsPerDayRobot || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-500 dark:text-gray-500 max-w-xs truncate">{row.notes || '—'}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Currently stored */}
+                          {ttSports.length > 0 && !ttCsvParsed && (
+                            <div>
+                              <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+                                Currently stored — {ttSports.length} sports
+                              </h4>
+                              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                                <table className="min-w-full text-xs">
+                                  <thead className="bg-gray-50 dark:bg-gray-800">
+                                    <tr>
+                                      {['Sport', 'Manual (min)', 'Robot (min)', 'Saved (%)', 'Paint (%)', 'Fields/day M→R'].map(col => (
+                                        <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    {ttSports.map((row, i) => (
+                                      <tr key={i} className="bg-white dark:bg-gray-900">
+                                        <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{row.sport}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.manualTimeMin || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.robotTimeMin || '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedPct ? `${row.timeSavedPct}%` : '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.paintSavingsPct ? `${row.paintSavingsPct}%` : '—'}</td>
+                                        <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
+                                          {row.fieldsPerDayManual && row.fieldsPerDayRobot
+                                            ? `${row.fieldsPerDayManual} → ${row.fieldsPerDayRobot}`
+                                            : '—'}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              <button
+                                onClick={() => {
+                                  if (confirm('Clear all sports data?')) saveTTSports([]);
+                                }}
+                                className="mt-2 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                              >
+                                Clear all sports data
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Update Knowledge Base */}

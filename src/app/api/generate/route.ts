@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAnthropicClient, parseJSON } from '@/lib/anthropic';
-import { SYSTEM_PROMPT, buildGenerationPrompt, buildRefinementPrompt } from '@/lib/prompts';
+import { buildSystemPrompt, buildGenerationPrompt, buildRefinementPrompt } from '@/lib/prompts';
+import { getSportProofPoints } from '@/lib/tt-knowledge';
 import { GenerateRequest, GenerateResult } from '@/lib/types';
 import { findMatchingQuotes, formatQuotesForPrompt } from '@/lib/nps-quotes';
 
@@ -48,6 +49,9 @@ export async function POST(request: NextRequest) {
         prospectContext: body.prospectContext,
         socialProofQuotes,
       });
+
+      const sportContext = getSportProofPoints(body.industry);
+      if (sportContext) userPrompt += sportContext;
     }
 
     const encoder = new TextEncoder();
@@ -59,7 +63,7 @@ export async function POST(request: NextRequest) {
           const messageStream = client.messages.stream({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 4096,
-            system: SYSTEM_PROMPT,
+            system: buildSystemPrompt(),
             messages: [{ role: 'user', content: userPrompt }],
           });
 
@@ -98,7 +102,7 @@ export async function POST(request: NextRequest) {
             const retryStream = client.messages.stream({
               model: 'claude-sonnet-4-20250514',
               max_tokens: 4096,
-              system: SYSTEM_PROMPT,
+              system: buildSystemPrompt(),
               messages: [{ role: 'user', content: retryPrompt }],
             });
 
