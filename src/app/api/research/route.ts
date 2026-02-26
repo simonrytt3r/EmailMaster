@@ -70,7 +70,9 @@ ${hasResults ? searchResults : '(No search results available — use your genera
 
 CRITICAL: Return ONLY valid JSON. No markdown fences, no explanation, no text outside the JSON object.
 If a field has no data, use an empty array [] or empty string "". Never omit a field.
-{"organization":{"summary":"2-3 sentences about the org","size":"e.g. 12 schools or unknown","sports":["sport1"],"recentNews":["item1"],"challenges":["item1"],"keyFacts":["fact1"]},"person":{"summary":"2-3 sentences about the person","role":"title and scope","tenure":"if known or unknown","recentActivity":["item1"],"notableItems":["item1"]},"personalizationHooks":[{"hook":"specific org fact","emailAngle":"how to use this to open an email","strength":"strong"}],"personHooks":[{"hook":"specific person fact","emailAngle":"how to use this to open an email","strength":"strong"}],"sources":["url1"]}`;
+For "location": use a 2-letter US state code (e.g. "FL", "TX") if the org is in the US, or the country name (e.g. "Germany") if outside the US. Empty string if truly unknown.
+For "orgType": describe the type of facility/organization in 1-4 words (e.g. "high school", "golf course", "parks & rec", "university", "professional sports club"). Empty string if unknown.
+{"organization":{"summary":"2-3 sentences about the org","size":"e.g. 12 schools or unknown","location":"FL","orgType":"high school","sports":["sport1"],"recentNews":["item1"],"challenges":["item1"],"keyFacts":["fact1"]},"person":{"summary":"2-3 sentences about the person","role":"title and scope","tenure":"if known or unknown","recentActivity":["item1"],"notableItems":["item1"]},"personalizationHooks":[{"hook":"specific org fact","emailAngle":"how to use this to open an email","strength":"strong"}],"personHooks":[{"hook":"specific person fact","emailAngle":"how to use this to open an email","strength":"strong"}],"sources":["url1"]}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -86,8 +88,8 @@ ${params.linkedinUrl ? `LinkedIn: ${params.linkedinUrl}` : ''}
 ${params.websiteUrl ? `Website: ${params.websiteUrl}` : ''}
 
 Search for org facts, recent news, person background, and personalization angles.
-Return ONLY this JSON (no markdown):
-{"organization":{"summary":"2-3 sentences","size":"e.g. 12 schools","sports":["sport1"],"recentNews":["item1"],"challenges":["item1"],"keyFacts":["fact1"]},"person":{"summary":"2-3 sentences","role":"title and scope","tenure":"if known","recentActivity":["item1"],"notableItems":["item1"]},"personalizationHooks":[{"hook":"specific org fact","emailAngle":"how to open an email with this","strength":"strong"}],"personHooks":[{"hook":"specific person fact","emailAngle":"how to open an email with this","strength":"strong"}],"sources":["url1"]}`;
+Return ONLY this JSON (no markdown). For "location": 2-letter US state code (e.g. "FL") or country name if outside US. For "orgType": 1-4 word description (e.g. "high school", "golf course", "parks & rec").
+{"organization":{"summary":"2-3 sentences","size":"e.g. 12 schools","location":"FL","orgType":"high school","sports":["sport1"],"recentNews":["item1"],"challenges":["item1"],"keyFacts":["fact1"]},"person":{"summary":"2-3 sentences","role":"title and scope","tenure":"if known","recentActivity":["item1"],"notableItems":["item1"]},"personalizationHooks":[{"hook":"specific org fact","emailAngle":"how to open an email with this","strength":"strong"}],"personHooks":[{"hook":"specific person fact","emailAngle":"how to open an email with this","strength":"strong"}],"sources":["url1"]}`;
 }
 
 // ---------------------------------------------------------------------------

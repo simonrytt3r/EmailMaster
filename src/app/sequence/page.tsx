@@ -290,6 +290,19 @@ export default function SequencePage() {
     }
     if (researchResult.organization.challenges?.length > 0) {
       setPainPoints((prev) => (prev.trim() ? prev : researchResult.organization.challenges.slice(0, 3).join('; ')));
+    }
+    if (researchResult.organization.location) {
+      setProspectState((prev) => (prev.trim() ? prev : researchResult.organization.location!));
+    }
+    if (researchResult.organization.orgType) {
+      setOrgType((prev) => (prev.trim() ? prev : researchResult.organization.orgType!));
+    }
+    // Open optional section if any optional field was auto-filled
+    if (
+      researchResult.organization.challenges?.length > 0 ||
+      researchResult.organization.location ||
+      researchResult.organization.orgType
+    ) {
       setShowOptional(true);
     }
   }, [researchResult, researchInputs]);

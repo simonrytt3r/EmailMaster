@@ -96,6 +96,10 @@ export interface ResearchResult {
   organization: {
     summary: string;
     size: string;
+    /** US state (2-letter code e.g. "FL") or country name if outside US */
+    location?: string;
+    /** Facility / org type e.g. "high school", "golf course", "parks & rec" */
+    orgType?: string;
     sports: string[];
     recentNews: string[];
     challenges: string[];
