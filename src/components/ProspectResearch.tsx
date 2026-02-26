@@ -184,7 +184,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
   }
 
   const inputClass =
-    'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150';
+    'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-tt-green/40 transition-shadow duration-150';
   const labelClass =
     'block text-[12px] font-medium text-ios-text-2 uppercase tracking-wide mb-1.5';
 
@@ -198,7 +198,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
       >
         <div className="flex items-center gap-2.5">
           {/* Step indicator */}
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-ios-blue text-white text-[11px] font-bold flex-shrink-0">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-tt-green text-white text-[11px] font-bold flex-shrink-0">
             1
           </span>
           <div>
@@ -206,7 +206,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
               Research Your Prospect
             </span>
             {result && (
-              <span className="ml-2 text-[12px] text-ios-green font-medium">
+              <span className="ml-2 text-[12px] text-tt-green font-medium">
                 ✓ {inputs.personName ? `${inputs.personName} @ ` : ''}{inputs.company}
               </span>
             )}
@@ -222,7 +222,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
             <button
               type="button"
               onClick={(e) => { e.stopPropagation(); setShowRecent((v) => !v); }}
-              className="text-[12px] text-ios-blue font-medium px-2 py-1 rounded-md hover:bg-ios-blue/10 transition-colors"
+              className="text-[12px] text-tt-green font-medium px-2 py-1 rounded-md hover:bg-tt-green/10 transition-colors"
             >
               Recent
             </button>
@@ -337,7 +337,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
                   type="button"
                   onClick={() => handleResearch()}
                   disabled={loading || !inputs.company.trim()}
-                  className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90 flex items-center justify-center gap-2"
+                  className="w-full h-[50px] bg-tt-green disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-tt-green transition-all duration-150 ease-out active:scale-[0.97] hover:bg-tt-green/90 flex items-center justify-center gap-2"
                 >
                   {loading ? (
                     <>
@@ -367,7 +367,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
               {cacheMeta && cacheMeta.cached && !cacheMeta.hasNewInfo && (
                 <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary border border-ios-sep/30 dark:border-ios-dark-sep/60">
                   <div className="flex items-center gap-2 text-[12px] text-ios-text-2">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0 text-ios-blue" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 text-tt-grey-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     <span>
@@ -380,7 +380,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
                       type="button"
                       onClick={() => handleResearch(true)}
                       disabled={loading}
-                      className="text-[12px] text-ios-blue font-medium hover:underline disabled:opacity-40"
+                      className="text-[12px] text-tt-green font-medium hover:underline disabled:opacity-40"
                     >
                       {loading ? 'Refreshing…' : 'Refresh now'}
                     </button>
@@ -436,7 +436,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
                   {result.personalizationHooks?.length > 0 && (
                     <div>
                       <p className="text-[11px] font-medium text-ios-text-2 mb-2 flex items-center gap-1.5">
-                        <span className="w-1.5 h-1.5 rounded-full bg-ios-blue inline-block" />
+                        <span className="w-1.5 h-1.5 rounded-full bg-tt-green inline-block" />
                         About the Company
                       </p>
                       <div className="space-y-2">
@@ -448,13 +448,13 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
                               key={key}
                               type="button"
                               onClick={() => toggleHook(key)}
-                              className={`w-full text-left rounded-ios-sm border p-3 transition-all duration-150 ${hookColour(hook.strength)} ${selected ? 'ring-2 ring-ios-blue' : ''}`}
+                              className={`w-full text-left rounded-ios-sm border p-3 transition-all duration-150 ${hookColour(hook.strength)} ${selected ? 'ring-2 ring-tt-green' : ''}`}
                             >
                               <div className="flex items-start justify-between gap-2 mb-1">
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${hookBadgeColour(hook.strength)}`}>
                                   {hook.strength}
                                 </span>
-                                <span className="text-[13px] font-medium text-ios-blue">
+                                <span className="text-[13px] font-medium text-tt-green">
                                   {selected ? '✓ Selected' : 'Tap to select'}
                                 </span>
                               </div>
@@ -493,7 +493,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
                                 <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${hookBadgeColour(hook.strength)}`}>
                                   {hook.strength}
                                 </span>
-                                <span className="text-[13px] font-medium text-ios-blue">
+                                <span className="text-[13px] font-medium text-tt-green">
                                   {selected ? '✓ Selected' : 'Tap to select'}
                                 </span>
                               </div>
@@ -532,7 +532,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
                     <ul className="space-y-1">
                       {result.organization.keyFacts.map((f, i) => (
                         <li key={i} className="text-[13px] text-ios-text-2 flex items-start gap-1.5">
-                          <span className="mt-1.5 w-1 h-1 rounded-full bg-ios-blue flex-shrink-0" />
+                          <span className="mt-1.5 w-1 h-1 rounded-full bg-tt-green flex-shrink-0" />
                           {f}
                         </li>
                       ))}
@@ -541,7 +541,7 @@ export default function ProspectResearch({ onResearchChange }: ProspectResearchP
                   {result.organization.sports?.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1">
                       {result.organization.sports.map((s, i) => (
-                        <span key={i} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-ios-blue/10 text-ios-blue">
+                        <span key={i} className="px-2 py-0.5 rounded-full text-[11px] font-medium bg-tt-green/10 text-tt-green">
                           {s}
                         </span>
                       ))}

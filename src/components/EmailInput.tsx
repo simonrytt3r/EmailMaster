@@ -55,7 +55,7 @@ Would it be worth a quick conversation?
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder || defaultPlaceholder}
           rows={rows}
-          className="w-full px-4 py-3.5 text-[15px] rounded-ios bg-white dark:bg-ios-dark-card text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 font-mono leading-relaxed resize-none shadow-ios focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150"
+          className="w-full px-4 py-3.5 text-[15px] rounded-ios bg-white dark:bg-ios-dark-card text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 font-mono leading-relaxed resize-none shadow-ios focus:outline-none focus:ring-2 focus:ring-tt-green/40 transition-shadow duration-150"
           style={{ minHeight: `${rows * 24}px` }}
         />
         {value && (

@@ -17,7 +17,7 @@ interface RefinedEmail {
 }
 
 const inputClass =
-  'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150';
+  'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-tt-green/40 transition-shadow duration-150';
 const labelClass = 'block text-[12px] font-medium text-ios-text-2 uppercase tracking-wide mb-1.5';
 
 // ─── Variation Card ───────────────────────────────────────────────────────────
@@ -72,7 +72,7 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
       {/* Card header */}
       <div className="px-4 py-3 border-b border-ios-sep/20 dark:border-ios-dark-sep/60 bg-ios-bg dark:bg-ios-dark-secondary">
         <div className="flex items-center justify-between gap-2">
-          <span className="px-2.5 py-1 rounded-full text-[12px] font-semibold bg-ios-blue/10 text-ios-blue">
+          <span className="px-2.5 py-1 rounded-full text-[12px] font-semibold bg-tt-green/10 text-tt-green">
             {variation.label}
           </span>
           {variation.scores && (
@@ -117,19 +117,19 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
         </button>
         <button
           onClick={() => onRefine(emailText, variation.label)}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-ios-blue/10 text-ios-blue hover:bg-ios-blue/15 transition-colors duration-150"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-tt-green/10 text-tt-green hover:bg-tt-green/15 transition-colors duration-150"
         >
           Refine
         </button>
         {!replied ? (
           <button
             onClick={() => setShowReplyForm(!showReplyForm)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-ios-green/10 text-ios-green hover:bg-ios-green/15 transition-colors duration-150"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-tt-green/10 text-tt-green hover:bg-tt-green/15 transition-colors duration-150"
           >
             Got a reply
           </button>
         ) : (
-          <span className="text-[13px] font-medium text-ios-green">✓ Logged</span>
+          <span className="text-[13px] font-medium text-tt-green">✓ Logged</span>
         )}
       </div>
 
@@ -143,7 +143,7 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
             onChange={(e) => setReplyNote(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !logging && handleLogReply()}
             placeholder="Optional: booked demo, said not now, gave referral..."
-            className="w-full px-3 py-2 text-[13px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-green/30"
+            className="w-full px-3 py-2 text-[13px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-tt-green/30"
           />
           {replyError && (
             <p className="text-[12px] text-ios-red">Failed to log — check your connection and try again.</p>
@@ -152,7 +152,7 @@ function VariationCard({ variation, onRefine, context }: VariationCardProps) {
             <button
               onClick={handleLogReply}
               disabled={logging}
-              className="px-4 py-1.5 rounded-full text-[13px] font-medium bg-ios-green text-white hover:bg-ios-green/90 disabled:opacity-40 transition-colors"
+              className="px-4 py-1.5 rounded-full text-[13px] font-medium bg-tt-green text-white hover:bg-tt-green/90 disabled:opacity-40 transition-colors"
             >
               {logging ? 'Logging...' : replyError ? 'Try again' : 'Log it'}
             </button>
@@ -296,7 +296,7 @@ function RefineModal({ email, label, onClose, onRefined }: RefineModalProps) {
           <button
             onClick={handleRefine}
             disabled={loading || !instructions.trim()}
-            className="w-full h-[50px] bg-ios-blue disabled:opacity-40 text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97]"
+            className="w-full h-[50px] bg-tt-green disabled:opacity-40 text-white font-semibold rounded-ios text-[17px] shadow-tt-green transition-all duration-150 ease-out active:scale-[0.97]"
           >
             {loading ? 'Refining...' : 'Refine Email'}
           </button>
@@ -495,14 +495,14 @@ export default function GeneratePage() {
       <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
         {/* Step indicator */}
         <div className="px-4 pt-3.5 pb-0 flex items-center gap-2.5">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-ios-blue text-white text-[11px] font-bold flex-shrink-0">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-tt-green text-white text-[11px] font-bold flex-shrink-0">
             2
           </span>
           <span className="text-[15px] font-medium text-ios-text dark:text-white">
             Configure Your Email
           </span>
           {researchResult && (
-            <span className="text-[12px] text-ios-green font-medium ml-auto">
+            <span className="text-[12px] text-tt-green-2 font-medium ml-auto">
               Research attached{selectedHooks.length > 0 ? ` · ${selectedHooks.length} hook${selectedHooks.length === 1 ? '' : 's'} selected` : ''} ✓
             </span>
           )}
@@ -570,7 +570,7 @@ export default function GeneratePage() {
               <div>
                 <label className={labelClass}>
                   Organisation Type
-                  <span className="ml-1 text-ios-blue normal-case font-normal">· NPS quotes</span>
+                  <span className="ml-1 text-tt-teal normal-case font-normal">· NPS quotes</span>
                 </label>
                 <input
                   type="text"
@@ -583,7 +583,7 @@ export default function GeneratePage() {
               <div>
                 <label className={labelClass}>
                   Prospect State
-                  <span className="ml-1 text-ios-blue normal-case font-normal">· NPS quotes</span>
+                  <span className="ml-1 text-tt-teal normal-case font-normal">· NPS quotes</span>
                 </label>
                 <input
                   type="text"
@@ -657,7 +657,7 @@ export default function GeneratePage() {
           <button
             onClick={handleGenerate}
             disabled={loading || !offering.trim() || !targetPersona.trim()}
-            className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
+            className="w-full h-[50px] bg-tt-green disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-tt-green transition-all duration-150 ease-out active:scale-[0.97] hover:bg-tt-green/90"
           >
             {loading ? 'Generating 3 variations...' : 'Generate Email Variations'}
           </button>
@@ -706,9 +706,9 @@ export default function GeneratePage() {
             <div className="h-px flex-1 bg-ios-sep/40 dark:bg-ios-dark-sep" />
           </div>
           <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden ios-card-hover"
-            style={{ borderColor: 'rgba(0,122,255,0.3)', borderWidth: 1 }}>
+            style={{ borderColor: 'rgba(140,203,63,0.3)', borderWidth: 1 }}>
             <div className="px-4 py-3 border-b border-ios-sep/20 dark:border-ios-dark-sep/60 flex items-center justify-between bg-ios-bg dark:bg-ios-dark-secondary">
-              <span className="px-2.5 py-1 rounded-full text-[12px] font-semibold bg-ios-blue/10 text-ios-blue">
+              <span className="px-2.5 py-1 rounded-full text-[12px] font-semibold bg-tt-green/10 text-tt-green">
                 Refined Email
               </span>
               <CopyButton text={`Subject: ${refinedEmail.subject}\n\n${refinedEmail.body}`} label="Copy" />

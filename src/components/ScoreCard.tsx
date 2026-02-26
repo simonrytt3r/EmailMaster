@@ -69,10 +69,10 @@ function CategoryRow({ category }: { category: CategoryScore }) {
 
           {category.rewriteSuggestion && (
             <div
-              style={{ backgroundColor: 'rgba(0, 122, 255, 0.07)' }}
+              style={{ backgroundColor: 'rgba(140, 203, 63, 0.07)' }}
               className="rounded-ios-sm px-3 py-2.5"
             >
-              <p className="text-[11px] font-semibold text-ios-blue mb-1 uppercase tracking-wide">
+              <p className="text-[11px] font-semibold text-tt-green mb-1 uppercase tracking-wide">
                 Rewrite suggestion
               </p>
               <p className="text-[14px] text-ios-text dark:text-white italic leading-relaxed">

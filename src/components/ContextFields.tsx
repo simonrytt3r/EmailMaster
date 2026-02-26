@@ -9,7 +9,7 @@ interface ContextFieldsProps {
 }
 
 const inputClass =
-  'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-white dark:bg-ios-dark-card text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 shadow-ios focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150';
+  'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-white dark:bg-ios-dark-card text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 shadow-ios focus:outline-none focus:ring-2 focus:ring-tt-green/40 transition-shadow duration-150';
 
 const labelClass = 'block text-[12px] font-medium text-ios-text-2 mb-1.5 uppercase tracking-wide';
 
@@ -34,7 +34,7 @@ export default function ContextFields({ value, onChange }: ContextFieldsProps) {
           Add Context
           <span className="text-[13px] font-normal text-ios-text-2">— optional, improves accuracy</span>
           {hasContent && (
-            <span className="px-2 py-0.5 text-[11px] font-semibold bg-ios-blue text-white rounded-full">
+            <span className="px-2 py-0.5 text-[11px] font-semibold bg-tt-green text-white rounded-full">
               Active
             </span>
           )}

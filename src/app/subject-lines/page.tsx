@@ -64,7 +64,7 @@ function SubjectLineRow({ line }: { line: SubjectLine }) {
     <button
       onClick={handleCopy}
       className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-all duration-150 group ${
-        flashing ? 'bg-ios-blue/8' : 'hover:bg-ios-bg dark:hover:bg-ios-dark-secondary'
+        flashing ? 'bg-tt-green/8' : 'hover:bg-ios-bg dark:hover:bg-ios-dark-secondary'
       }`}
     >
       {/* Subject text */}
@@ -200,7 +200,7 @@ export default function SubjectLinesPage() {
               onChange={(e) => setEmailBody(e.target.value)}
               placeholder="Paste your email body, or just describe what it's about. e.g., 'Cold email to athletic directors offering turf maintenance software that helped Ohio State cut costs by 40%'"
               rows={6}
-              className="w-full px-4 py-3.5 text-[15px] rounded-ios bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150"
+              className="w-full px-4 py-3.5 text-[15px] rounded-ios bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-tt-green/40 transition-shadow duration-150"
             />
             {emailBody && (
               <div className="absolute bottom-3 right-3 text-[11px] text-ios-text-3 tabular-nums pointer-events-none">
@@ -225,7 +225,7 @@ export default function SubjectLinesPage() {
         <button
           onClick={handleGenerate}
           disabled={loading || !emailBody.trim()}
-          className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
+          className="w-full h-[50px] bg-tt-green disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-tt-green transition-all duration-150 ease-out active:scale-[0.97] hover:bg-tt-green/90"
         >
           {loading ? 'Generating...' : 'Generate 10 Subject Lines'}
         </button>
@@ -289,7 +289,7 @@ export default function SubjectLinesPage() {
                 'A/B test question-based vs direct lines first — the difference is often significant',
               ].map((tip) => (
                 <li key={tip} className="flex gap-2.5 text-[14px] text-ios-text dark:text-white">
-                  <span className="text-ios-blue flex-shrink-0 font-medium">›</span>
+                  <span className="text-tt-green flex-shrink-0 font-medium">›</span>
                   {tip}
                 </li>
               ))}

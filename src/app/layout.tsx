@@ -3,8 +3,8 @@ import './globals.css';
 import Navigation from '@/components/Navigation';
 
 export const metadata: Metadata = {
-  title: 'Cold Email Lab',
-  description: 'Analyze, score, and generate cold outreach emails using best practices from the world\'s top email marketers.',
+  title: 'TTE.ai',
+  description: 'AI-powered cold outreach platform. Research prospects, generate personalized emails, and build automated sequences.',
 };
 
 export default function RootLayout({
@@ -29,9 +29,9 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="min-h-screen bg-ios-bg dark:bg-ios-dark-bg text-ios-text dark:text-white antialiased">
+      <body className="min-h-screen bg-ios-bg dark:bg-tt-black text-ios-text dark:text-white antialiased">
         <Navigation />
-        <main className="max-w-ios mx-auto px-4 sm:px-5 py-8">
+        <main className="max-w-tt mx-auto px-4 sm:px-5 py-8">
           {children}
         </main>
       </body>

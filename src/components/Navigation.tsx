@@ -5,42 +5,49 @@ import { usePathname } from 'next/navigation';
 import ThemeToggle from './ThemeToggle';
 
 const tabs = [
-  { href: '/analyze', label: 'Analyze' },
-  { href: '/generate', label: 'Generate' },
-  { href: '/sequence', label: 'Sequence' },
-  { href: '/subject-lines', label: 'Subjects' },
+  { href: '/analyze',       label: 'Analyze',   icon: '◎' },
+  { href: '/generate',      label: 'Generate',  icon: '✦' },
+  { href: '/sequence',      label: 'Sequence',  icon: '⋮' },
+  { href: '/subject-lines', label: 'Subjects',  icon: '◈' },
 ];
 
 export default function Navigation() {
   const pathname = usePathname();
 
   return (
-    <nav className="sticky top-0 z-50 bg-white/80 dark:bg-black/80 backdrop-blur-xl border-b border-ios-sep/40 dark:border-ios-dark-sep/60">
-      <div className="max-w-ios mx-auto px-4 sm:px-5 h-14 flex items-center justify-between gap-4">
+    <nav className="sticky top-0 z-50 bg-white/90 dark:bg-tt-black/90 backdrop-blur-xl border-b border-ios-sep/30 dark:border-tt-sep/60">
+      {/* Top accent bar */}
+      <div className="tt-accent-bar" />
 
-        {/* App title */}
+      <div className="max-w-tt mx-auto px-4 sm:px-5 h-13 flex items-center justify-between gap-6">
+
+        {/* TTE.ai wordmark */}
         <Link
-          href="/analyze"
-          className="text-[15px] font-semibold text-ios-text dark:text-white whitespace-nowrap flex-shrink-0"
+          href="/"
+          className="flex items-baseline gap-[1px] text-[17px] font-bold tracking-tight flex-shrink-0 group"
         >
-          Cold Email Lab
+          <span className="text-ios-text dark:text-white group-hover:opacity-90 transition-opacity">TTE</span>
+          <span className="text-tt-green group-hover:opacity-90 transition-opacity">.ai</span>
         </Link>
 
-        {/* iOS Segmented Control */}
-        <div className="flex items-center bg-ios-secondary dark:bg-ios-dark-secondary rounded-[9px] p-[3px] gap-[2px]">
+        {/* Tab navigation */}
+        <div className="flex items-center gap-1">
           {tabs.map((tab) => {
-            const isActive = pathname === tab.href;
+            const isActive = pathname === tab.href || pathname?.startsWith(tab.href + '/');
             return (
               <Link
                 key={tab.href}
                 href={tab.href}
-                className={`seg-pill px-3 py-[5px] rounded-[7px] text-[13px] font-medium whitespace-nowrap transition-all duration-150 ease-out select-none ${
+                className={`relative px-3 py-[7px] rounded-tt text-[13px] font-medium whitespace-nowrap transition-all duration-150 ease-out select-none ${
                   isActive
-                    ? 'bg-white dark:bg-ios-dark-card text-ios-text dark:text-white shadow-ios-seg'
-                    : 'text-ios-text-2 hover:text-ios-text dark:hover:text-white'
+                    ? 'text-tt-green bg-tt-green/10 dark:bg-tt-green/[0.08]'
+                    : 'text-ios-text-2 dark:text-tt-grey-2 hover:text-ios-text dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/5'
                 }`}
               >
                 {tab.label}
+                {isActive && (
+                  <span className="absolute bottom-[4px] left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-tt-green" />
+                )}
               </Link>
             );
           })}

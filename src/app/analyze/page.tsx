@@ -142,7 +142,7 @@ export default function AnalyzePage() {
       <div className="bg-white dark:bg-ios-dark-card rounded-ios shadow-ios overflow-hidden">
         {/* Step indicator */}
         <div className="px-4 pt-3.5 pb-0 flex items-center gap-2.5">
-          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-ios-blue text-white text-[11px] font-bold flex-shrink-0">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-tt-green text-white text-[11px] font-bold flex-shrink-0">
             2
           </span>
           <span className="text-[15px] font-medium text-ios-text dark:text-white">
@@ -198,7 +198,7 @@ export default function AnalyzePage() {
           <button
             onClick={handleAnalyze}
             disabled={loading || !body.trim()}
-            className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
+            className="w-full h-[50px] bg-tt-green disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-tt-green transition-all duration-150 ease-out active:scale-[0.97] hover:bg-tt-green/90"
           >
             {loading ? 'Analyzing...' : 'Analyze Email'}
           </button>

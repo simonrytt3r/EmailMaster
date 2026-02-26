@@ -33,8 +33,8 @@ export default function CopyButton({ text, label = 'Copy', className = '' }: Cop
       onClick={handleCopy}
       className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium transition-all duration-150 ease-out active:scale-95 ${
         copied
-          ? 'bg-ios-green/15 text-ios-green'
-          : 'bg-ios-blue/10 text-ios-blue hover:bg-ios-blue/15'
+          ? 'bg-tt-green/15 text-tt-green'
+          : 'bg-tt-card-2 text-tt-grey-2 hover:text-white hover:bg-white/10'
       } ${className}`}
     >
       {copied ? (

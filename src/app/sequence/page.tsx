@@ -10,21 +10,21 @@ import { SequenceRequest, SequenceResult, SequenceTouchEmail, ResearchResult, Re
 const COOLDOWN_MS = 5000;
 
 const inputClass =
-  'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-blue/40 transition-shadow duration-150';
+  'w-full px-3 py-2.5 text-[15px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-tt-green/40 transition-shadow duration-150';
 const labelClass =
   'block text-[12px] font-medium text-ios-text-2 uppercase tracking-wide mb-1.5';
 
 const TOUCH_COLORS: Record<number, string> = {
-  1: 'bg-ios-blue text-white',
-  2: 'bg-ios-green text-white',
-  3: 'bg-ios-yellow text-white',
-  4: 'bg-ios-red text-white',
-  5: 'bg-ios-text-2 text-white',
+  1: 'bg-tt-green text-white',
+  2: 'bg-tt-teal text-white',
+  3: 'bg-tt-orange text-tt-black',
+  4: 'bg-tt-green-2 text-white',
+  5: 'bg-tt-grey text-white',
 };
 
 const SCORE_COLOR = (score: number) => {
-  if (score >= 80) return 'text-ios-green';
-  if (score >= 65) return 'text-ios-yellow';
+  if (score >= 80) return 'text-tt-green';
+  if (score >= 65) return 'text-tt-orange';
   return 'text-ios-red';
 };
 
@@ -168,12 +168,12 @@ function TouchCard({
 
             {/* Strength/improvement */}
             <div className="grid grid-cols-2 gap-2">
-              <div className="bg-ios-green/10 rounded-ios-sm px-3 py-2">
-                <p className="text-[11px] font-semibold text-ios-green uppercase tracking-wide mb-0.5">Strength</p>
+              <div className="bg-tt-green/10 rounded-ios-sm px-3 py-2">
+                <p className="text-[11px] font-semibold text-tt-green uppercase tracking-wide mb-0.5">Strength</p>
                 <p className="text-[12px] text-ios-text dark:text-white">{touch.keyStrength}</p>
               </div>
-              <div className="bg-ios-yellow/10 rounded-ios-sm px-3 py-2">
-                <p className="text-[11px] font-semibold text-ios-yellow uppercase tracking-wide mb-0.5">Watch</p>
+              <div className="bg-tt-orange/10 rounded-ios-sm px-3 py-2">
+                <p className="text-[11px] font-semibold text-tt-orange uppercase tracking-wide mb-0.5">Watch</p>
                 <p className="text-[12px] text-ios-text dark:text-white">{touch.keyImprovement}</p>
               </div>
             </div>
@@ -194,12 +194,12 @@ function TouchCard({
               {!replied ? (
                 <button
                   onClick={() => setShowReplyForm(!showReplyForm)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-ios-green/10 text-ios-green hover:bg-ios-green/15 transition-colors duration-150"
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] font-medium bg-tt-green/10 text-tt-green hover:bg-tt-green/15 transition-colors duration-150"
                 >
                   Got a reply
                 </button>
               ) : (
-                <span className="text-[13px] font-medium text-ios-green">✓ Logged</span>
+                <span className="text-[13px] font-medium text-tt-green">✓ Logged</span>
               )}
             </div>
 
@@ -213,7 +213,7 @@ function TouchCard({
                   onChange={(e) => setReplyNote(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !logging && handleLogReply()}
                   placeholder="Optional: booked demo, said not now, gave referral..."
-                  className="w-full px-3 py-2 text-[13px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-ios-green/30"
+                  className="w-full px-3 py-2 text-[13px] rounded-ios-sm bg-ios-bg dark:bg-ios-dark-secondary text-ios-text dark:text-white placeholder-ios-text-3 dark:placeholder-ios-text-2 focus:outline-none focus:ring-2 focus:ring-tt-green/30"
                 />
                 {replyError && (
                   <p className="text-[12px] text-ios-red">Failed to log — check your connection and try again.</p>
@@ -222,7 +222,7 @@ function TouchCard({
                   <button
                     onClick={handleLogReply}
                     disabled={logging}
-                    className="px-4 py-1.5 rounded-full text-[13px] font-medium bg-ios-green text-white hover:bg-ios-green/90 disabled:opacity-40 transition-colors"
+                    className="px-4 py-1.5 rounded-full text-[13px] font-medium bg-tt-green text-white hover:bg-tt-green/90 disabled:opacity-40 transition-colors"
                   >
                     {logging ? 'Logging...' : replyError ? 'Try again' : 'Log it'}
                   </button>
@@ -390,13 +390,14 @@ export default function SequencePage() {
   };
 
   return (
-    <main className="min-h-screen bg-ios-bg dark:bg-ios-dark-bg pb-16">
-      <div className="max-w-ios mx-auto px-4 sm:px-5 pt-6 space-y-5">
+    <div className="space-y-5 pb-8">
 
         {/* Page header */}
         <div>
-          <h1 className="text-[22px] font-bold text-ios-text dark:text-white">Sequence Builder</h1>
-          <p className="text-[14px] text-ios-text-2 mt-1">
+          <h1 className="text-[28px] font-bold text-ios-text dark:text-white tracking-tight">
+            Sequence Builder
+          </h1>
+          <p className="text-[15px] text-ios-text-2 mt-1 leading-relaxed">
             Generate a complete {sequenceLength}-touch cold email sequence — all at once, each touch distinct.
           </p>
         </div>
@@ -409,14 +410,14 @@ export default function SequencePage() {
 
           {/* Step indicator */}
           <div className="px-4 pt-3.5 pb-0 flex items-center gap-2.5">
-            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-ios-blue text-white text-[11px] font-bold flex-shrink-0">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-tt-green text-white text-[11px] font-bold flex-shrink-0">
               2
             </span>
             <span className="text-[15px] font-medium text-ios-text dark:text-white">
               Configure Your Sequence
             </span>
             {researchResult && (
-              <span className="text-[12px] text-ios-green font-medium ml-auto">
+              <span className="text-[12px] text-tt-green-2 font-medium ml-auto">
                 Research attached{selectedHooks.length > 0 ? ` · ${selectedHooks.length} hook${selectedHooks.length === 1 ? '' : 's'}` : ''} ✓
               </span>
             )}
@@ -477,7 +478,7 @@ export default function SequencePage() {
             <div>
               <button
                 onClick={() => setShowOptional(!showOptional)}
-                className="flex items-center gap-1.5 text-[13px] font-medium text-ios-blue"
+                className="flex items-center gap-1.5 text-[13px] font-medium text-tt-green"
               >
                 <svg
                   className={`w-4 h-4 transition-transform duration-150 ${showOptional ? 'rotate-90' : ''}`}
@@ -507,7 +508,7 @@ export default function SequencePage() {
                     <div>
                       <label className={labelClass}>
                         Organisation Type
-                        <span className="ml-1 text-ios-blue normal-case font-normal">· NPS quotes</span>
+                        <span className="ml-1 text-tt-teal normal-case font-normal">· NPS quotes</span>
                       </label>
                       <input
                         type="text"
@@ -520,7 +521,7 @@ export default function SequencePage() {
                     <div>
                       <label className={labelClass}>
                         Prospect State
-                        <span className="ml-1 text-ios-blue normal-case font-normal">· NPS quotes</span>
+                        <span className="ml-1 text-tt-teal normal-case font-normal">· NPS quotes</span>
                       </label>
                       <input
                         type="text"
@@ -599,7 +600,7 @@ export default function SequencePage() {
             <button
               onClick={handleGenerate}
               disabled={!canSubmit}
-              className="w-full h-[50px] bg-ios-blue disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-ios-blue transition-all duration-150 ease-out active:scale-[0.97] hover:bg-ios-blue/90"
+              className="w-full h-[50px] bg-tt-green disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold rounded-ios text-[17px] shadow-tt-green transition-all duration-150 ease-out active:scale-[0.97] hover:bg-tt-green/90"
             >
               {loading
                 ? `Building ${sequenceLength}-touch sequence...`
@@ -651,7 +652,7 @@ export default function SequencePage() {
                 </span>
               ))}
               {researchResult && researchInputs?.company && (
-                <span className="text-[11px] text-ios-green bg-ios-green/10 px-2 py-0.5 rounded-full font-medium">
+                <span className="text-[11px] text-tt-green bg-tt-green/10 px-2 py-0.5 rounded-full font-medium">
                   Personalised for {researchInputs.personName ? `${researchInputs.personName} @ ` : ''}{researchInputs.company}
                 </span>
               )}
@@ -681,7 +682,6 @@ export default function SequencePage() {
             </div>
           </div>
         )}
-      </div>
-    </main>
+    </div>
   );
 }
