@@ -580,7 +580,7 @@ export default function GeneratePage() {
                 <label className={labelClass}>Industry</label>
                 <input type="text" value={industry} onChange={(e) => setIndustry(e.target.value)} placeholder="e.g., K-12 Schools" className={inputClass} />
               </div>
-              <div>
+              <div className="pt-4">
                 <label className={labelClass}>
                   Organisation Type
                   <span className="ml-1 text-tt-teal normal-case font-normal">· NPS quotes</span>
