@@ -259,6 +259,9 @@ function TTKnowledgePanel({ password }: { password: string }) {
   const [ttSportsSaving, setTtSportsSaving] = useState(false);
   const [ttSportsSaved, setTtSportsSaved] = useState(false);
   const [ttDragging, setTtDragging] = useState(false);
+  const [ttImportMode, setTtImportMode] = useState<'replace' | 'merge'>('replace');
+  const [ttFileName, setTtFileName] = useState('');
+  const [ttColsFound, setTtColsFound] = useState<Record<string, boolean>>({});
   const csvFileRef = useRef<HTMLInputElement>(null);
 
   async function loadTTKnowledge() {
@@ -298,20 +301,31 @@ function TTKnowledgePanel({ password }: { password: string }) {
     finally { setTtNarrativeSaving(false); }
   }
 
-  async function saveTTSports(sports: SportRow[]) {
+  async function saveTTSports(incoming: SportRow[], mode: 'replace' | 'merge' = 'replace') {
     setTtSportsSaving(true);
     setTtSportsSaved(false);
     try {
+      let final: SportRow[];
+      if (mode === 'merge') {
+        // Keep existing entries not in incoming, update/add incoming entries
+        const incomingNames = new Set(incoming.map(r => r.sport.toLowerCase()));
+        const kept = ttSports.filter(r => !incomingNames.has(r.sport.toLowerCase()));
+        final = [...kept, ...incoming];
+      } else {
+        final = incoming;
+      }
       const res = await fetch('/api/admin/tt-knowledge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password, action: 'save-sports', sports }),
+        body: JSON.stringify({ password, action: 'save-sports', sports: final }),
       });
       const json = await res.json();
       if (json.success) {
-        setTtSports(sports);
+        setTtSports(final);
         setTtCsvParsed(null);
         setTtCsvText('');
+        setTtFileName('');
+        setTtColsFound({});
         setTtSportsSaved(true);
         setTtUpdatedAt(json.updatedAt ?? '');
         setTimeout(() => setTtSportsSaved(false), 3000);
@@ -320,9 +334,10 @@ function TTKnowledgePanel({ password }: { password: string }) {
     finally { setTtSportsSaving(false); }
   }
 
-  function parseSportsCSV(csvText: string) {
+  function parseSportsCSV(csvText: string, fileName?: string) {
     setTtCsvError('');
     setTtCsvParsed(null);
+    setTtFileName(fileName ?? '');
     const lines = csvText.trim().split('\n').filter(Boolean);
     if (lines.length < 2) {
       setTtCsvError('CSV must have a header row and at least one data row.');
@@ -356,6 +371,17 @@ function TTKnowledgePanel({ password }: { password: string }) {
       setTtCsvError('Could not find a "Sport" column. Make sure the header row has a column named "Sport".');
       return;
     }
+    setTtColsFound({
+      'Sport': true,
+      'Manual Time': colManual !== -1,
+      'Robot Time': colRobot !== -1,
+      'Time Saved (min)': colSavedMin !== -1,
+      'Time Saved (%)': colSavedPct !== -1,
+      'Paint Savings': colPaint !== -1,
+      'Fields/Day Manual': colManualFields !== -1,
+      'Fields/Day Robot': colRobotFields !== -1,
+      'Notes': colNotes !== -1,
+    });
     const getNum = (cols: string[], idx: number) =>
       idx === -1 ? 0 : parseFloat(cols[idx]?.trim() ?? '') || 0;
     const getStr = (cols: string[], idx: number) =>
@@ -463,156 +489,266 @@ function TTKnowledgePanel({ password }: { password: string }) {
               {/* Sports Data tab */}
               {ttTab === 'sports' && (
                 <div className="px-6 py-5 space-y-5">
-                  <div className="space-y-2">
-                    <p className="text-sm text-gray-500 dark:text-gray-400">
-                      Paste your CSV from Google Sheets. Claude will use these exact numbers when generating emails for a specific sport. Expected columns:
-                    </p>
-                    <div className="bg-gray-50 dark:bg-gray-800 rounded-lg px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 overflow-x-auto whitespace-nowrap">
-                      Sport, Manual Time (min), Robot Time (min), Time Saved (min), Time Saved (%), Paint Savings (%), Fields Per Day (Manual), Fields Per Day (Robot), Notes
-                    </div>
-                    <p className="text-xs text-gray-400 dark:text-gray-500">
-                      Column names are flexible — auto-detected by keyword. Only the &ldquo;Sport&rdquo; column is required. Omit any columns you don&apos;t have data for.
-                    </p>
-                  </div>
 
-                  <div className="space-y-3">
-                    {/* Hidden file input */}
-                    <input
-                      ref={csvFileRef}
-                      type="file"
-                      accept=".csv,text/csv"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const text = ev.target?.result as string;
-                          setTtCsvText(text);
-                          parseSportsCSV(text);
-                        };
-                        reader.readAsText(file);
-                        e.target.value = '';
-                      }}
-                    />
+                  {/* Hidden file input — always present */}
+                  <input
+                    ref={csvFileRef}
+                    type="file"
+                    accept=".csv,text/csv"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      const reader = new FileReader();
+                      reader.onload = (ev) => {
+                        const text = ev.target?.result as string;
+                        setTtCsvText(text);
+                        parseSportsCSV(text, file.name);
+                      };
+                      reader.readAsText(file);
+                      e.target.value = '';
+                    }}
+                  />
 
-                    {/* Drop zone */}
-                    <div
-                      onClick={() => csvFileRef.current?.click()}
-                      onDragOver={(e) => { e.preventDefault(); setTtDragging(true); }}
-                      onDragLeave={() => setTtDragging(false)}
-                      onDrop={(e) => {
-                        e.preventDefault();
-                        setTtDragging(false);
-                        const file = e.dataTransfer.files?.[0];
-                        if (!file) return;
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const text = ev.target?.result as string;
-                          setTtCsvText(text);
-                          parseSportsCSV(text);
-                        };
-                        reader.readAsText(file);
-                      }}
-                      className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 cursor-pointer transition-colors ${
-                        ttDragging
-                          ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
-                          : 'border-gray-300 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-600 hover:bg-gray-50 dark:hover:bg-gray-800/50'
-                      }`}
-                    >
-                      <svg className={`w-8 h-8 ${ttDragging ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
-                      </svg>
-                      <div className="text-center">
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                          Drop your .csv file here
-                        </span>
-                        <span className="text-sm text-gray-500 dark:text-gray-400"> or </span>
-                        <span className="text-sm font-medium text-green-600 dark:text-green-400">browse</span>
+                  {/* ── Upload zone (hidden once a file is parsed) ── */}
+                  {!ttCsvParsed && (
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                          Upload your CSV from Google Sheets. Claude will use these exact numbers when generating emails for a specific sport.
+                        </p>
+                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 overflow-x-auto whitespace-nowrap">
+                          Sport, Manual Time (min), Robot Time (min), Time Saved (min), Time Saved (%), Paint Savings (%), Fields Per Day (Manual), Fields Per Day (Robot), Notes
+                        </div>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">
+                          Column names are flexible — auto-detected by keyword. Only the &ldquo;Sport&rdquo; column is required.
+                        </p>
                       </div>
-                      <p className="text-xs text-gray-400 dark:text-gray-500">Google Sheets → File → Download → CSV</p>
-                    </div>
 
-                    {/* Paste fallback */}
-                    <details className="group">
-                      <summary className="text-xs text-gray-400 dark:text-gray-500 cursor-pointer select-none hover:text-gray-600 dark:hover:text-gray-300 list-none flex items-center gap-1">
-                        <span className="group-open:hidden">▶</span>
-                        <span className="hidden group-open:inline">▼</span>
-                        Or paste CSV text manually
-                      </summary>
-                      <textarea
-                        value={ttCsvText}
-                        onChange={(e) => setTtCsvText(e.target.value)}
-                        rows={6}
-                        placeholder="Paste CSV here…"
-                        className="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/40 font-mono resize-none"
-                      />
-                    </details>
-
-                    <div className="flex gap-2 flex-wrap">
-                      <button
-                        onClick={() => parseSportsCSV(ttCsvText)}
-                        disabled={!ttCsvText.trim()}
-                        className="px-4 py-2 rounded-lg bg-gray-800 dark:bg-gray-700 hover:bg-gray-900 dark:hover:bg-gray-600 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+                      {/* Drop zone */}
+                      <div
+                        onClick={() => csvFileRef.current?.click()}
+                        onDragOver={(e) => { e.preventDefault(); setTtDragging(true); }}
+                        onDragLeave={() => setTtDragging(false)}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setTtDragging(false);
+                          const file = e.dataTransfer.files?.[0];
+                          if (!file) return;
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const text = ev.target?.result as string;
+                            setTtCsvText(text);
+                            parseSportsCSV(text, file.name);
+                          };
+                          reader.readAsText(file);
+                        }}
+                        className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 cursor-pointer transition-colors ${
+                          ttDragging
+                            ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+                            : 'border-gray-300 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-600 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                        }`}
                       >
-                        Preview Import
-                      </button>
-                      {ttCsvParsed && (
+                        <svg className={`w-8 h-8 ${ttDragging ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                        </svg>
+                        <div className="text-center">
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                            Drop your .csv file here
+                          </span>
+                          <span className="text-sm text-gray-500 dark:text-gray-400"> or </span>
+                          <span className="text-sm font-medium text-green-600 dark:text-green-400">browse</span>
+                        </div>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">Google Sheets → File → Download → CSV</p>
+                      </div>
+
+                      {/* Paste fallback */}
+                      <details className="group">
+                        <summary className="text-xs text-gray-400 dark:text-gray-500 cursor-pointer select-none hover:text-gray-600 dark:hover:text-gray-300 list-none flex items-center gap-1">
+                          <span className="group-open:hidden">▶</span>
+                          <span className="hidden group-open:inline">▼</span>
+                          Or paste CSV text manually
+                        </summary>
+                        <div className="mt-2 space-y-2">
+                          <textarea
+                            value={ttCsvText}
+                            onChange={(e) => setTtCsvText(e.target.value)}
+                            rows={6}
+                            placeholder="Paste CSV here…"
+                            className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/40 font-mono resize-none"
+                          />
+                          <button
+                            onClick={() => parseSportsCSV(ttCsvText)}
+                            disabled={!ttCsvText.trim()}
+                            className="px-4 py-2 rounded-lg bg-gray-800 dark:bg-gray-700 hover:bg-gray-900 dark:hover:bg-gray-600 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+                          >
+                            Preview Import
+                          </button>
+                        </div>
+                      </details>
+
+                      {ttCsvError && (
+                        <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-3">{ttCsvError}</p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ── Validation panel (shown after a file is parsed) ── */}
+                  {ttCsvParsed && (
+                    <div className="space-y-4">
+
+                      {/* File header */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-green-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                          </svg>
+                          <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                            {ttFileName || 'Pasted CSV'} — {ttCsvParsed.length} sport{ttCsvParsed.length !== 1 ? 's' : ''} detected
+                          </span>
+                        </div>
                         <button
-                          onClick={() => saveTTSports(ttCsvParsed)}
+                          onClick={() => {
+                            setTtCsvParsed(null);
+                            setTtCsvText('');
+                            setTtFileName('');
+                            setTtColsFound({});
+                            setTtCsvError('');
+                          }}
+                          className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
+                        >
+                          Discard
+                        </button>
+                      </div>
+
+                      {/* Detected columns */}
+                      {Object.keys(ttColsFound).length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Detected columns</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(ttColsFound).map(([col, found]) => (
+                              <span
+                                key={col}
+                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                                  found
+                                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 line-through'
+                                }`}
+                              >
+                                {found ? '✓' : '—'} {col}
+                              </span>
+                            ))}
+                          </div>
+                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
+                            Strikethrough columns were not found in your CSV — those fields will default to 0.
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Preview table */}
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Data preview</p>
+                        <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-50 dark:bg-gray-800">
+                              <tr>
+                                {['Sport', 'Manual (min)', 'Robot (min)', 'Saved (min)', 'Saved (%)', 'Paint (%)', 'Fields/day M', 'Fields/day R', 'Notes'].map(col => (
+                                  <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                              {ttCsvParsed.map((row, i) => (
+                                <tr key={i} className="bg-white dark:bg-gray-900">
+                                  <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{row.sport}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.manualTimeMin || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.robotTimeMin || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedMin || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedPct || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.paintSavingsPct || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.fieldsPerDayManual || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.fieldsPerDayRobot || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-500 dark:text-gray-500 max-w-xs truncate">{row.notes || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Import mode — only shown when existing data present */}
+                      {ttSports.length > 0 && (
+                        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
+                          <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                            You already have {ttSports.length} sport{ttSports.length !== 1 ? 's' : ''} stored. How do you want to import?
+                          </p>
+                          <div className="space-y-2">
+                            <label className="flex items-start gap-3 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="ttImportMode"
+                                value="replace"
+                                checked={ttImportMode === 'replace'}
+                                onChange={() => setTtImportMode('replace')}
+                                className="mt-0.5 accent-green-600"
+                              />
+                              <div>
+                                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Replace all</span>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Delete existing sports data and use only this file&apos;s data.</p>
+                              </div>
+                            </label>
+                            <label className="flex items-start gap-3 cursor-pointer">
+                              <input
+                                type="radio"
+                                name="ttImportMode"
+                                value="merge"
+                                checked={ttImportMode === 'merge'}
+                                onChange={() => setTtImportMode('merge')}
+                                className="mt-0.5 accent-green-600"
+                              />
+                              <div>
+                                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Merge</span>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">Keep sports not in this file; update or add sports that are.</p>
+                              </div>
+                            </label>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Confirm & save */}
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => saveTTSports(ttCsvParsed, ttSports.length > 0 ? ttImportMode : 'replace')}
                           disabled={ttSportsSaving}
-                          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors ${
                             ttSportsSaved
                               ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
                               : 'bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white'
                           }`}
                         >
-                          {ttSportsSaving ? 'Saving…' : ttSportsSaved ? `✓ ${ttCsvParsed.length} sports saved` : `Save ${ttCsvParsed.length} sports`}
+                          {ttSportsSaving
+                            ? 'Saving…'
+                            : ttSportsSaved
+                            ? `✓ Saved`
+                            : `Confirm & Save ${ttCsvParsed.length} sport${ttCsvParsed.length !== 1 ? 's' : ''}`}
                         </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {ttCsvError && (
-                    <p className="text-sm text-red-500 bg-red-50 dark:bg-red-950/30 rounded-lg p-3">{ttCsvError}</p>
-                  )}
-
-                  {/* Preview table */}
-                  {ttCsvParsed && ttCsvParsed.length > 0 && (
-                    <div>
-                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
-                        Preview — {ttCsvParsed.length} sports detected
-                      </h4>
-                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
-                        <table className="min-w-full text-xs">
-                          <thead className="bg-gray-50 dark:bg-gray-800">
-                            <tr>
-                              {['Sport', 'Manual (min)', 'Robot (min)', 'Saved (min)', 'Saved (%)', 'Paint (%)', 'Fields/day M', 'Fields/day R', 'Notes'].map(col => (
-                                <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
-                              ))}
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                            {ttCsvParsed.map((row, i) => (
-                              <tr key={i} className="bg-white dark:bg-gray-900">
-                                <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{row.sport}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.manualTimeMin || '—'}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.robotTimeMin || '—'}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedMin || '—'}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedPct || '—'}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.paintSavingsPct || '—'}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.fieldsPerDayManual || '—'}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.fieldsPerDayRobot || '—'}</td>
-                                <td className="px-3 py-2 text-gray-500 dark:text-gray-500 max-w-xs truncate">{row.notes || '—'}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                        <button
+                          onClick={() => {
+                            setTtCsvParsed(null);
+                            setTtCsvText('');
+                            setTtFileName('');
+                            setTtColsFound({});
+                            setTtCsvError('');
+                          }}
+                          className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 text-sm transition-colors"
+                        >
+                          Discard
+                        </button>
                       </div>
                     </div>
                   )}
 
-                  {/* Currently stored */}
+                  {/* ── Currently stored (shown when no pending import) ── */}
                   {ttSports.length > 0 && !ttCsvParsed && (
                     <div>
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
@@ -647,7 +783,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
                       </div>
                       <button
                         onClick={() => {
-                          if (confirm('Clear all sports data?')) saveTTSports([]);
+                          if (confirm('Clear all sports data?')) saveTTSports([], 'replace');
                         }}
                         className="mt-2 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400"
                       >
