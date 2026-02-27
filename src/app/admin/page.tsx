@@ -258,6 +258,8 @@ function TTKnowledgePanel({ password }: { password: string }) {
   const [ttCsvError, setTtCsvError] = useState('');
   const [ttSportsSaving, setTtSportsSaving] = useState(false);
   const [ttSportsSaved, setTtSportsSaved] = useState(false);
+  const [ttDragging, setTtDragging] = useState(false);
+  const csvFileRef = useRef<HTMLInputElement>(null);
 
   async function loadTTKnowledge() {
     setTtLoading(true);
@@ -473,14 +475,80 @@ function TTKnowledgePanel({ password }: { password: string }) {
                     </p>
                   </div>
 
-                  <div className="space-y-2">
-                    <textarea
-                      value={ttCsvText}
-                      onChange={(e) => setTtCsvText(e.target.value)}
-                      rows={8}
-                      placeholder="Paste CSV here…"
-                      className="w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/40 font-mono resize-none"
+                  <div className="space-y-3">
+                    {/* Hidden file input */}
+                    <input
+                      ref={csvFileRef}
+                      type="file"
+                      accept=".csv,text/csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const text = ev.target?.result as string;
+                          setTtCsvText(text);
+                          parseSportsCSV(text);
+                        };
+                        reader.readAsText(file);
+                        e.target.value = '';
+                      }}
                     />
+
+                    {/* Drop zone */}
+                    <div
+                      onClick={() => csvFileRef.current?.click()}
+                      onDragOver={(e) => { e.preventDefault(); setTtDragging(true); }}
+                      onDragLeave={() => setTtDragging(false)}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        setTtDragging(false);
+                        const file = e.dataTransfer.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const text = ev.target?.result as string;
+                          setTtCsvText(text);
+                          parseSportsCSV(text);
+                        };
+                        reader.readAsText(file);
+                      }}
+                      className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 cursor-pointer transition-colors ${
+                        ttDragging
+                          ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
+                          : 'border-gray-300 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-600 hover:bg-gray-50 dark:hover:bg-gray-800/50'
+                      }`}
+                    >
+                      <svg className={`w-8 h-8 ${ttDragging ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+                      </svg>
+                      <div className="text-center">
+                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                          Drop your .csv file here
+                        </span>
+                        <span className="text-sm text-gray-500 dark:text-gray-400"> or </span>
+                        <span className="text-sm font-medium text-green-600 dark:text-green-400">browse</span>
+                      </div>
+                      <p className="text-xs text-gray-400 dark:text-gray-500">Google Sheets → File → Download → CSV</p>
+                    </div>
+
+                    {/* Paste fallback */}
+                    <details className="group">
+                      <summary className="text-xs text-gray-400 dark:text-gray-500 cursor-pointer select-none hover:text-gray-600 dark:hover:text-gray-300 list-none flex items-center gap-1">
+                        <span className="group-open:hidden">▶</span>
+                        <span className="hidden group-open:inline">▼</span>
+                        Or paste CSV text manually
+                      </summary>
+                      <textarea
+                        value={ttCsvText}
+                        onChange={(e) => setTtCsvText(e.target.value)}
+                        rows={6}
+                        placeholder="Paste CSV here…"
+                        className="mt-2 w-full px-4 py-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/40 font-mono resize-none"
+                      />
+                    </details>
+
                     <div className="flex gap-2 flex-wrap">
                       <button
                         onClick={() => parseSportsCSV(ttCsvText)}
