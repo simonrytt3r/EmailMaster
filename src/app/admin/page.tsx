@@ -261,7 +261,9 @@ function TTKnowledgePanel({ password }: { password: string }) {
   const [ttDragging, setTtDragging] = useState(false);
   const [ttImportMode, setTtImportMode] = useState<'replace' | 'merge'>('replace');
   const [ttFileName, setTtFileName] = useState('');
-  const [ttColsFound, setTtColsFound] = useState<Record<string, boolean>>({});
+  // maps field label → raw header string that was matched, or '' if not found
+  const [ttColsFound, setTtColsFound] = useState<Record<string, string>>({});
+  const [ttRawHeaders, setTtRawHeaders] = useState<string[]>([]);
   const csvFileRef = useRef<HTMLInputElement>(null);
 
   async function loadTTKnowledge() {
@@ -326,6 +328,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
         setTtCsvText('');
         setTtFileName('');
         setTtColsFound({});
+        setTtRawHeaders([]);
         setTtSportsSaved(true);
         setTtUpdatedAt(json.updatedAt ?? '');
         setTimeout(() => setTtSportsSaved(false), 3000);
@@ -338,68 +341,108 @@ function TTKnowledgePanel({ password }: { password: string }) {
     setTtCsvError('');
     setTtCsvParsed(null);
     setTtFileName(fileName ?? '');
-    const lines = csvText.trim().split('\n').filter(Boolean);
+    setTtRawHeaders([]);
+    setTtColsFound({});
+
+    // Normalize line endings (\r\n → \n, lone \r → \n)
+    const normalized = csvText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const lines = normalized.split('\n').filter(Boolean);
     if (lines.length < 2) {
       setTtCsvError('CSV must have a header row and at least one data row.');
       return;
     }
+
+    // RFC 4180-compliant CSV field parser — handles quoted fields with commas inside
+    function parseCSVLine(line: string): string[] {
+      const fields: string[] = [];
+      let cur = '';
+      let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') {
+          if (inQ && line[i + 1] === '"') { cur += '"'; i++; } // escaped quote
+          else { inQ = !inQ; }
+        } else if (ch === ',' && !inQ) {
+          fields.push(cur.trim());
+          cur = '';
+        } else {
+          cur += ch;
+        }
+      }
+      fields.push(cur.trim());
+      return fields;
+    }
+
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const headers = lines[0].split(',').map(h => normalize(h.trim()));
+    const rawHeaders = parseCSVLine(lines[0]);
+    setTtRawHeaders(rawHeaders);
+    const normHeaders = rawHeaders.map(h => normalize(h));
+
+    // Returns first column index that matches any of the keyword candidates,
+    // trying exact normalized match first, then substring match.
     const findCol = (...candidates: string[]): number => {
       for (const c of candidates) {
         const norm = normalize(c);
-        const idx = headers.findIndex(h => h === norm);
+        const idx = normHeaders.findIndex(h => h === norm);
         if (idx !== -1) return idx;
       }
       for (const c of candidates) {
         const norm = normalize(c);
-        const idx = headers.findIndex(h => h.includes(norm));
+        const idx = normHeaders.findIndex(h => h.includes(norm) || norm.includes(h));
         if (idx !== -1) return idx;
       }
       return -1;
     };
+
     const colSport        = findCol('sport', 'sport name', 'sportname');
-    const colManual       = findCol('manual time', 'manual time min', 'time manual', 'manualmin');
-    const colRobot        = findCol('robot time', 'robot time min', 'tt time', 'turftank time', 'robotmin');
-    const colSavedMin     = findCol('time saved min', 'timesavedmin', 'minutes saved', 'savedmin');
-    const colSavedPct     = findCol('time saved %', 'time saved pct', 'timesavedpct', 'time reduction', 'reduction');
-    const colPaint        = findCol('paint savings', 'paintsavings', 'paint %', 'paint reduction');
-    const colManualFields = findCol('fields per day manual', 'fieldsperdaymanual', 'manual fields per day', 'fieldsmanual');
-    const colRobotFields  = findCol('fields per day robot', 'fieldsperdayrobot', 'robot fields per day', 'fieldsrobot', 'tt fields');
-    const colNotes        = findCol('notes', 'comments', 'additional notes');
+    const colManual       = findCol('manual time', 'manual time min', 'time manual', 'manualmin', 'manual lining', 'manuallining');
+    const colRobot        = findCol('robot time', 'robot time min', 'tt time', 'turftank time', 'robotmin', 'robot lining', 'turfank');
+    const colSavedMin     = findCol('time saved min', 'timesavedmin', 'minutes saved', 'savedmin', 'time saved');
+    const colSavedPct     = findCol('time saved %', 'time saved pct', 'timesavedpct', 'time reduction', 'reduction %', 'time %');
+    const colPaint        = findCol('paint savings', 'paintsavings', 'paint %', 'paint reduction', 'paint saving');
+    const colManualFields = findCol('fields per day manual', 'fieldsperdaymanual', 'manual fields per day', 'fieldsmanual', 'fields manual', 'fields/day manual');
+    const colRobotFields  = findCol('fields per day robot', 'fieldsperdayrobot', 'robot fields per day', 'fieldsrobot', 'tt fields', 'fields robot', 'fields/day robot');
+    const colNotes        = findCol('notes', 'comments', 'additional notes', 'note');
+
     if (colSport === -1) {
-      setTtCsvError('Could not find a "Sport" column. Make sure the header row has a column named "Sport".');
+      setTtCsvError('Could not find a "Sport" column. Check the column mapping table below to see what headers were detected.');
       return;
     }
+
+    // Store the raw header that was matched for each field ('' = not matched)
     setTtColsFound({
-      'Sport': true,
-      'Manual Time': colManual !== -1,
-      'Robot Time': colRobot !== -1,
-      'Time Saved (min)': colSavedMin !== -1,
-      'Time Saved (%)': colSavedPct !== -1,
-      'Paint Savings': colPaint !== -1,
-      'Fields/Day Manual': colManualFields !== -1,
-      'Fields/Day Robot': colRobotFields !== -1,
-      'Notes': colNotes !== -1,
+      'Sport':            rawHeaders[colSport] ?? '',
+      'Manual Time':      colManual       !== -1 ? rawHeaders[colManual]       : '',
+      'Robot Time':       colRobot        !== -1 ? rawHeaders[colRobot]        : '',
+      'Time Saved (min)': colSavedMin     !== -1 ? rawHeaders[colSavedMin]     : '',
+      'Time Saved (%)':   colSavedPct     !== -1 ? rawHeaders[colSavedPct]     : '',
+      'Paint Savings':    colPaint        !== -1 ? rawHeaders[colPaint]        : '',
+      'Fields/Day Manual':colManualFields !== -1 ? rawHeaders[colManualFields] : '',
+      'Fields/Day Robot': colRobotFields  !== -1 ? rawHeaders[colRobotFields]  : '',
+      'Notes':            colNotes        !== -1 ? rawHeaders[colNotes]        : '',
     });
+
+    // Strip non-numeric chars (handles "40%", "$1,200", trailing spaces) before parseFloat
     const getNum = (cols: string[], idx: number) =>
-      idx === -1 ? 0 : parseFloat(cols[idx]?.trim() ?? '') || 0;
+      idx === -1 ? 0 : parseFloat((cols[idx]?.trim() ?? '').replace(/[^0-9.-]/g, '')) || 0;
     const getStr = (cols: string[], idx: number) =>
       idx === -1 ? '' : (cols[idx]?.trim() ?? '');
+
     const entries: SportRow[] = lines.slice(1).map(line => {
-      const cols = line.split(',');
+      const cols = parseCSVLine(line);
       return {
-        sport: getStr(cols, colSport),
-        manualTimeMin: getNum(cols, colManual),
-        robotTimeMin: getNum(cols, colRobot),
-        timeSavedMin: getNum(cols, colSavedMin),
-        timeSavedPct: getNum(cols, colSavedPct),
-        paintSavingsPct: getNum(cols, colPaint),
-        fieldsPerDayManual: getNum(cols, colManualFields),
+        sport:             getStr(cols, colSport),
+        manualTimeMin:     getNum(cols, colManual),
+        robotTimeMin:      getNum(cols, colRobot),
+        timeSavedMin:      getNum(cols, colSavedMin),
+        timeSavedPct:      getNum(cols, colSavedPct),
+        paintSavingsPct:   getNum(cols, colPaint),
+        fieldsPerDayManual:getNum(cols, colManualFields),
         fieldsPerDayRobot: getNum(cols, colRobotFields),
-        notes: getStr(cols, colNotes),
+        notes:             getStr(cols, colNotes),
       };
     }).filter(e => e.sport);
+
     if (entries.length === 0) {
       setTtCsvError('No valid sport rows found. Check that each data row has a Sport value.');
       return;
@@ -613,6 +656,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
                             setTtCsvText('');
                             setTtFileName('');
                             setTtColsFound({});
+                            setTtRawHeaders([]);
                             setTtCsvError('');
                           }}
                           className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
@@ -621,26 +665,52 @@ function TTKnowledgePanel({ password }: { password: string }) {
                         </button>
                       </div>
 
-                      {/* Detected columns */}
+                      {/* Column mapping table */}
                       {Object.keys(ttColsFound).length > 0 && (
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">Detected columns</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {Object.entries(ttColsFound).map(([col, found]) => (
-                              <span
-                                key={col}
-                                className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                                  found
-                                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                                    : 'bg-gray-100 dark:bg-gray-800 text-gray-400 dark:text-gray-500 line-through'
-                                }`}
-                              >
-                                {found ? '✓' : '—'} {col}
-                              </span>
-                            ))}
+                        <div className="space-y-3">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">Column mapping</p>
+
+                          {/* Raw headers from the file */}
+                          {ttRawHeaders.length > 0 && (
+                            <div className="bg-gray-50 dark:bg-gray-800/60 rounded-lg px-3 py-2">
+                              <p className="text-xs text-gray-400 dark:text-gray-500 mb-1 font-medium">Headers detected in your file:</p>
+                              <p className="font-mono text-xs text-gray-600 dark:text-gray-300 leading-relaxed">
+                                {ttRawHeaders.map((h, i) => (
+                                  <span key={i}>
+                                    {i > 0 && <span className="text-gray-300 dark:text-gray-600">, </span>}
+                                    <span className="text-blue-600 dark:text-blue-400">&ldquo;{h}&rdquo;</span>
+                                  </span>
+                                ))}
+                              </p>
+                            </div>
+                          )}
+
+                          {/* Field → matched header mapping */}
+                          <div className="rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+                            <table className="min-w-full text-xs">
+                              <thead className="bg-gray-50 dark:bg-gray-800">
+                                <tr>
+                                  <th className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 w-1/3">Field used in prompts</th>
+                                  <th className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400">Matched to column in your CSV</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                {Object.entries(ttColsFound).map(([field, rawHeader]) => (
+                                  <tr key={field} className="bg-white dark:bg-gray-900">
+                                    <td className="px-3 py-2 font-medium text-gray-700 dark:text-gray-300">{field}</td>
+                                    <td className="px-3 py-2">
+                                      {rawHeader
+                                        ? <span className="inline-flex items-center gap-1.5 font-mono bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 px-2 py-0.5 rounded-md">✓ &ldquo;{rawHeader}&rdquo;</span>
+                                        : <span className="text-gray-400 dark:text-gray-600 italic">not found — will be 0</span>
+                                      }
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
                           </div>
-                          <p className="text-xs text-gray-400 dark:text-gray-500 mt-1.5">
-                            Strikethrough columns were not found in your CSV — those fields will default to 0.
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            If a field mapped to the wrong column, rename that column header in Google Sheets and re-upload.
                           </p>
                         </div>
                       )}
@@ -738,6 +808,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
                             setTtCsvText('');
                             setTtFileName('');
                             setTtColsFound({});
+                            setTtRawHeaders([]);
                             setTtCsvError('');
                           }}
                           className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 text-sm transition-colors"
