@@ -5,11 +5,18 @@ import path from 'path';
 
 export interface SportDataEntry {
   sport: string;
-  manualTimeMin: number;
-  robotTimeMin: number;
-  timeSavedMin: number;
-  timeSavedPct: number;
-  paintSavingsPct: number;
+  // Per-event time comparison
+  manualTimeMin: number;       // human time for one manual marking (min)
+  robotTimeMin: number;        // human monitoring time per TT marking event (min)
+  timeSavedMin: number;        // time saved per event (min)
+  timeSavedPct: number;        // % time saved per event
+  // Annual savings from the Savings section
+  laborSavingsDollar: number;  // annual labor cost savings ($)
+  paintSavingsGal: number;     // annual paint saved (gallons)
+  paintSavingsDollar: number;  // annual paint cost savings ($)
+  totalSavingsDollar: number;  // total annual savings ($)
+  // Legacy / optional
+  paintSavingsPct: number;     // % paint saved (optional)
   fieldsPerDayManual: number;
   fieldsPerDayRobot: number;
   notes: string;
@@ -90,15 +97,16 @@ export function getSportProofPoints(industry?: string): string {
     `Use these exact numbers in subject lines, opening lines, and proof points:`,
   ];
 
-  if (match.manualTimeMin) lines.push(`- Manual marking time: ${match.manualTimeMin} min/field`);
-  if (match.robotTimeMin) lines.push(`- Turf Tank time: ~${match.robotTimeMin} min/field`);
-  if (match.timeSavedMin) lines.push(`- Time saved per field: ${match.timeSavedMin} min`);
-  if (match.timeSavedPct) lines.push(`- Time reduction: ${match.timeSavedPct}%`);
+  if (match.manualTimeMin) lines.push(`- Manual marking time: ${match.manualTimeMin} min per event`);
+  if (match.robotTimeMin) lines.push(`- Turf Tank operator time: ~${match.robotTimeMin} min per event (robot marks autonomously)`);
+  if (match.timeSavedMin) lines.push(`- Time saved per marking: ${match.timeSavedMin} min (${match.timeSavedPct}%)`);
+  if (match.laborSavingsDollar) lines.push(`- Annual labor cost savings: $${Math.round(match.laborSavingsDollar).toLocaleString()}`);
+  if (match.paintSavingsGal) lines.push(`- Annual paint saved: ${match.paintSavingsGal.toFixed(0)} gallons`);
+  if (match.paintSavingsDollar) lines.push(`- Annual paint cost savings: $${Math.round(match.paintSavingsDollar).toLocaleString()}`);
+  if (match.totalSavingsDollar) lines.push(`- TOTAL annual savings with Turf Tank: $${Math.round(match.totalSavingsDollar).toLocaleString()}`);
   if (match.paintSavingsPct) lines.push(`- Paint savings: ${match.paintSavingsPct}%`);
   if (match.fieldsPerDayManual && match.fieldsPerDayRobot) {
-    lines.push(
-      `- Daily field capacity: from ${match.fieldsPerDayManual} to ${match.fieldsPerDayRobot} fields/day`
-    );
+    lines.push(`- Daily field capacity: from ${match.fieldsPerDayManual} to ${match.fieldsPerDayRobot} fields/day`);
   }
   if (match.notes?.trim()) lines.push(`- Context: ${match.notes.trim()}`);
 

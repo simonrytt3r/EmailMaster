@@ -91,10 +91,17 @@ interface NpsEntryLocal {
 
 interface SportRow {
   sport: string;
+  // Per-event time comparison
   manualTimeMin: number;
   robotTimeMin: number;
   timeSavedMin: number;
   timeSavedPct: number;
+  // Annual savings (from the Savings section of the sheet)
+  laborSavingsDollar: number;
+  paintSavingsGal: number;
+  paintSavingsDollar: number;
+  totalSavingsDollar: number;
+  // Optional / legacy
   paintSavingsPct: number;
   fieldsPerDayManual: number;
   fieldsPerDayRobot: number;
@@ -348,13 +355,14 @@ function TTKnowledgePanel({ password }: { password: string }) {
 
     // Normalize line endings (\r\n → \n, lone \r → \n)
     const normalized = csvText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    const lines = normalized.split('\n').filter(Boolean);
-    if (lines.length < 2) {
-      setTtCsvError('CSV must have a header row and at least one data row.');
+    // Keep empty lines — they're structural separators between sections
+    const allLines = normalized.split('\n');
+    if (allLines.filter(Boolean).length < 2) {
+      setTtCsvError('CSV appears empty. Make sure the sheet is shared publicly before importing.');
       return;
     }
 
-    // RFC 4180-compliant CSV field parser — handles quoted fields with commas inside
+    // ── RFC 4180 CSV line parser (handles quoted fields with commas inside) ──
     function parseCSVLine(line: string): string[] {
       const fields: string[] = [];
       let cur = '';
@@ -362,151 +370,228 @@ function TTKnowledgePanel({ password }: { password: string }) {
       for (let i = 0; i < line.length; i++) {
         const ch = line[i];
         if (ch === '"') {
-          if (inQ && line[i + 1] === '"') { cur += '"'; i++; } // escaped quote
+          if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
           else { inQ = !inQ; }
-        } else if (ch === ',' && !inQ) {
-          fields.push(cur.trim());
-          cur = '';
-        } else {
-          cur += ch;
-        }
+        } else if (ch === ',' && !inQ) { fields.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
       }
       fields.push(cur.trim());
       return fields;
     }
 
-    const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    // Strip $ , % and other non-numeric chars before parseFloat
+    const getNum = (row: string[], idx: number) =>
+      idx < 0 ? 0 : parseFloat((row[idx]?.trim() ?? '').replace(/[^0-9.-]/g, '')) || 0;
+    const getStr = (row: string[], idx: number) =>
+      idx < 0 ? '' : (row[idx]?.trim() ?? '');
 
-    // Auto-detect the actual header row — skip title rows like "MANUAL MARKINGS".
-    // A header row has ≥2 non-empty cells and contains at least one recognizable
-    // column keyword (sport, time, labor, paint, cost, notes, min, gal, etc.).
+    // ── Section header detection ──────────────────────────────────────────────
+    // A section header has ≥2 non-empty cells that collectively contain column keywords.
+    // Title-only rows (like "MANUAL MARKINGS") have only 1 non-empty cell → excluded.
+    const COL_KEYWORDS = ['time','labor','labour','paint','cost','saving','employee','gal',
+                          'overmark','marking','initial','turftank','nr of','per year','per field'];
     function looksLikeHeaderRow(fields: string[]): boolean {
-      const normF = fields.map(f => normalize(f)).filter(Boolean);
-      if (normF.length < 2) return false;
-      const keywords = ['sport','time','labor','labour','paint','cost','note','min','gal','marking','robot','field','saving'];
-      return keywords.some(kw => normF.some(f => f.includes(kw)));
+      const nonEmpty = fields.filter(f => f.trim());
+      if (nonEmpty.length < 2) return false;
+      return COL_KEYWORDS.some(kw => nonEmpty.some(f => f.toLowerCase().includes(kw)));
     }
 
-    let headerIdx = 0;
-    for (let i = 0; i < Math.min(lines.length, 8); i++) {
-      if (looksLikeHeaderRow(parseCSVLine(lines[i]))) {
-        headerIdx = i;
-        break;
+    // Determine section type from the first non-empty cell's normalized value
+    function getSectionType(fields: string[]): string {
+      const first = norm(fields.find(f => f.trim()) ?? '');
+      if (first === 'initialmarking' || first === 'marking') return 'manual_initial';
+      if (first === 'overmarking')                           return 'overmarking';
+      if (first.startsWith('manualperyear') || first === 'manualperyear') return 'manual_year';
+      if (first.startsWith('turftank'))                      return 'tt_year';
+      // Savings section: first cell is "Savings" AND other cells contain "saving"
+      if (first === 'savings') {
+        const normFields = fields.map(f => norm(f));
+        if (normFields.some((f, i) => i > 0 && f.includes('saving'))) return 'savings';
+      }
+      return 'unknown';
+    }
+
+    // Collect all section headers and their line positions
+    type SectionInfo = { lineIdx: number; type: string; fields: string[]; normFields: string[] };
+    const sections: SectionInfo[] = [];
+    for (let i = 0; i < allLines.length; i++) {
+      const line = allLines[i].trim();
+      if (!line) continue;
+      const fields = parseCSVLine(line);
+      if (!looksLikeHeaderRow(fields)) continue;
+      const type = getSectionType(fields);
+      if (type !== 'unknown') {
+        sections.push({ lineIdx: i, type, fields, normFields: fields.map(f => norm(f)) });
       }
     }
 
-    const rawHeaders = parseCSVLine(lines[headerIdx]);
-    setTtRawHeaders(rawHeaders);
-    const normHeaders = rawHeaders.map(h => normalize(h));
-
-    // Returns first column index that matches any of the keyword candidates.
-    // Tries exact normalized match first, then substring (header contains keyword).
-    const findCol = (...candidates: string[]): number => {
-      for (const c of candidates) {
-        const norm = normalize(c);
-        const idx = normHeaders.findIndex(h => h === norm);
-        if (idx !== -1) return idx;
-      }
-      for (const c of candidates) {
-        const norm = normalize(c);
-        const idx = normHeaders.findIndex(h => h.includes(norm));
-        if (idx !== -1) return idx;
-      }
-      return -1;
-    };
-
-    // ── Column detection ────────────────────────────────────────────────────────
-    // Candidates listed most-specific → least-specific to avoid false matches.
-    const colSport    = findCol(
-      'sport', 'sport name', 'sportname',
-      'initial marking', 'initialmarking', 'marking',   // Google Sheets common name
-    );
-    const colManual   = findCol(
-      'manual time (min)', 'manual time min', 'manual time',
-      'labor time (m)', 'labor time m', 'labour time m', // "Labor Time (m)" = minutes
-      'time manual', 'manualmin', 'manual lining',
-    );
-    const colRobot    = findCol(
-      'robot time (min)', 'robot time min', 'robot time',
-      'tt time (min)', 'tt time min', 'tt time',
-      'turftank time', 'robotmin', 'robot lining',
-    );
-    const colSavedMin = findCol(
-      'time saved (min)', 'time saved min', 'timesavedmin',
-      'minutes saved', 'savedmin', 'time saved',
-    );
-    const colSavedPct = findCol(
-      'time saved (%)', 'time saved %', 'time saved pct', 'timesavedpct',
-      'time reduction (%)', 'time reduction', 'reduction %',
-    );
-    const colPaint    = findCol(
-      'paint savings (%)', 'paint savings %', 'paint savings', 'paintsavings',
-      'paint reduction', 'paint saving',
-      'paint (gal)', 'paint gal',   // absolute gal value — stored as paint field
-    );
-    const colManualFields = findCol(
-      'fields/day (manual)', 'fields per day manual', 'fieldsperdaymanual',
-      'manual fields per day', 'fields manual',
-    );
-    const colRobotFields = findCol(
-      'fields/day (robot)', 'fields/day (tt)', 'fields per day robot', 'fieldsperdayrobot',
-      'robot fields per day', 'tt fields',
-    );
-    const colNotes    = findCol('notes', 'comments', 'additional notes', 'note');
-
-    if (colSport === -1) {
-      const detected = rawHeaders.filter(Boolean).join(', ');
+    if (sections.length === 0) {
       setTtCsvError(
-        `Could not find a sport/name column. Headers detected: ${detected || '(none)'}. ` +
-        `See the recommended format below.`
+        'Could not detect any data sections. ' +
+        'Expected sections like "Initial Marking", "Turf Tank Per Year", or "Savings". ' +
+        'If using CSV export, make sure you exported the correct sheet tab.'
       );
       return;
     }
 
-    // Store the raw header that matched each field ('' = not matched)
-    setTtColsFound({
-      'Sport':            rawHeaders[colSport] ?? '',
-      'Manual Time (min)':colManual       !== -1 ? rawHeaders[colManual]       : '',
-      'Robot Time (min)': colRobot        !== -1 ? rawHeaders[colRobot]        : '',
-      'Time Saved (min)': colSavedMin     !== -1 ? rawHeaders[colSavedMin]     : '',
-      'Time Saved (%)':   colSavedPct     !== -1 ? rawHeaders[colSavedPct]     : '',
-      'Paint Savings':    colPaint        !== -1 ? rawHeaders[colPaint]        : '',
-      'Fields/Day Manual':colManualFields !== -1 ? rawHeaders[colManualFields] : '',
-      'Fields/Day Robot': colRobotFields  !== -1 ? rawHeaders[colRobotFields]  : '',
-      'Notes':            colNotes        !== -1 ? rawHeaders[colNotes]        : '',
-    });
+    // Returns data rows for section s (lines between its header and the next section header)
+    function getDataRows(sIdx: number): string[][] {
+      const { lineIdx } = sections[sIdx];
+      const end = sIdx + 1 < sections.length ? sections[sIdx + 1].lineIdx : allLines.length;
+      return allLines.slice(lineIdx + 1, end).filter(l => l.trim()).map(parseCSVLine);
+    }
 
-    // Strip non-numeric chars before parseFloat (handles "40%", "$1,200", etc.)
-    const getNum = (cols: string[], idx: number) =>
-      idx === -1 ? 0 : parseFloat((cols[idx]?.trim() ?? '').replace(/[^0-9.-]/g, '')) || 0;
-    const getStr = (cols: string[], idx: number) =>
-      idx === -1 ? '' : (cols[idx]?.trim() ?? '');
-
-    // Data rows start after the detected header row; skip any sub-header rows
-    // (rows where the sport cell is empty or looks like a section title).
-    const dataLines = lines.slice(headerIdx + 1);
-    const entries: SportRow[] = dataLines.map(line => {
-      const cols = parseCSVLine(line);
-      return {
-        sport:             getStr(cols, colSport),
-        manualTimeMin:     getNum(cols, colManual),
-        robotTimeMin:      getNum(cols, colRobot),
-        timeSavedMin:      getNum(cols, colSavedMin),
-        timeSavedPct:      getNum(cols, colSavedPct),
-        paintSavingsPct:   getNum(cols, colPaint),
-        fieldsPerDayManual:getNum(cols, colManualFields),
-        fieldsPerDayRobot: getNum(cols, colRobotFields),
-        notes:             getStr(cols, colNotes),
+    // findCol helper scoped to a section's normalized headers
+    function makeFindCol(normHeaders: string[]) {
+      return (...candidates: string[]): number => {
+        for (const c of candidates) {
+          const n = norm(c);
+          const exact = normHeaders.findIndex(h => h === n);
+          if (exact !== -1) return exact;
+        }
+        for (const c of candidates) {
+          const n = norm(c);
+          const sub = normHeaders.findIndex(h => h.includes(n));
+          if (sub !== -1) return sub;
+        }
+        return -1;
       };
-    }).filter(e => {
-      if (!e.sport) return false;
-      // Skip sub-header rows that look like section titles (e.g. "Overmarking")
-      const norm = normalize(e.sport);
-      return !['overmarking', 'initialmarking', 'marking'].includes(norm);
-    });
+    }
+
+    // ── Per-section data maps keyed by sport name ─────────────────────────────
+    const manualInitialMap = new Map<string, { manualTimeMin: number }>();
+    const ttYearMap = new Map<string, { laborTimeH: number; imPerYear: number; omPerYear: number }>();
+    const savingsMap = new Map<string, {
+      laborSavedH: number; laborSavingsDollar: number;
+      paintSavingsGal: number; paintSavingsDollar: number; totalSavingsDollar: number;
+    }>();
+
+    // For the column-mapping display in the validation panel
+    let colsFoundRecord: Record<string, string> = {};
+    const detectedSectionTypes: string[] = [];
+
+    for (let s = 0; s < sections.length; s++) {
+      const { type, fields, normFields } = sections[s];
+      detectedSectionTypes.push(type);
+      const fc = makeFindCol(normFields);
+      const dataRows = getDataRows(s);
+
+      if (type === 'manual_initial') {
+        // Labor Time (m) = marking time in minutes (human labor per marking event)
+        const colTimeMin = fc('labor time (m)', 'labor time m', 'labour time m', 'time (m)', 'time m', 'time min');
+        for (const row of dataRows) {
+          const sport = getStr(row, 0);
+          if (!sport) continue;
+          manualInitialMap.set(sport, { manualTimeMin: getNum(row, colTimeMin) });
+        }
+      }
+
+      if (type === 'tt_year') {
+        // Labor Time (h) = total annual human hours with TT (setup + monitoring)
+        // IM per Year + OM per Year = total marking events → derive per-event time
+        const colLaborH = fc('labor time (h)', 'labor time h', 'labour time h', 'time (h)');
+        const colIM     = fc('im per year', 'im/year', 'imperyear', 'initial per year', 'initial marking (im)', 'initial marking');
+        const colOM     = fc('om per year', 'om/year', 'omperyear', 'overmarking per year', 'overmarking (om)', 'overmarking');
+        for (const row of dataRows) {
+          const sport = getStr(row, 0);
+          if (!sport) continue;
+          ttYearMap.set(sport, {
+            laborTimeH:  getNum(row, colLaborH),
+            imPerYear:   getNum(row, colIM),
+            omPerYear:   getNum(row, colOM),
+          });
+        }
+      }
+
+      if (type === 'savings') {
+        const colLaborH   = fc('labor time (h)', 'labor time h', 'labour time h');
+        const colLaborSav = fc('labor savings', 'labour savings', 'labor cost savings');
+        const colPaintGal = fc('paint (gal)', 'paint gal');
+        const colPaintSav = fc('paint savings', 'paint cost savings', 'paint saving');
+        const colTotal    = fc('savings per sport', 'savings per field', 'total savings', 'savings total');
+
+        // Record the savings section's column mapping for display
+        colsFoundRecord = {
+          'Sport':                fields[0]                         ?? '',
+          'Labor Saved (h/yr)':   colLaborH   >= 0 ? fields[colLaborH]   : '',
+          'Labor Savings ($/yr)': colLaborSav >= 0 ? fields[colLaborSav] : '',
+          'Paint Saved (gal/yr)': colPaintGal >= 0 ? fields[colPaintGal] : '',
+          'Paint Savings ($/yr)': colPaintSav >= 0 ? fields[colPaintSav] : '',
+          'Total Savings ($/yr)': colTotal    >= 0 ? fields[colTotal]    : '',
+        };
+        setTtRawHeaders(fields.filter(Boolean));
+
+        for (const row of dataRows) {
+          const sport = getStr(row, 0);
+          if (!sport) continue;
+          savingsMap.set(sport, {
+            laborSavedH:         getNum(row, colLaborH),
+            laborSavingsDollar:  getNum(row, colLaborSav),
+            paintSavingsGal:     getNum(row, colPaintGal),
+            paintSavingsDollar:  getNum(row, colPaintSav),
+            totalSavingsDollar:  getNum(row, colTotal),
+          });
+        }
+      }
+    }
+
+    setTtColsFound(colsFoundRecord);
+
+    // ── Merge sections into SportRow[] ────────────────────────────────────────
+    // Prefer sport names from savings section (most complete), fall back to others
+    const allSportNames = new Set<string>();
+    savingsMap.forEach((_, s) => allSportNames.add(s));
+    manualInitialMap.forEach((_, s) => allSportNames.add(s));
+    if (allSportNames.size === 0) ttYearMap.forEach((_, s) => allSportNames.add(s));
+
+    // Words that appear as section header text but get picked up as sport names
+    const SKIP_NAMES = new Set(['savings','overmarking','initialmarking','manualperyear',
+                                'turftankperyear','total','totals','sport','marking']);
+
+    const entries: SportRow[] = [];
+    for (const sportName of Array.from(allSportNames)) {
+      if (SKIP_NAMES.has(norm(sportName))) continue;
+
+      const manual = manualInitialMap.get(sportName);
+      const tt     = ttYearMap.get(sportName);
+      const sav    = savingsMap.get(sportName);
+
+      const manualTimeMin = manual?.manualTimeMin ?? 0;
+      // Derive per-event robot operator time: annual TT hours ÷ total annual events × 60
+      const totalEvents = (tt?.imPerYear ?? 0) + (tt?.omPerYear ?? 0);
+      const robotTimeMin = tt && totalEvents > 0
+        ? Math.round((tt.laborTimeH / totalEvents) * 60 * 10) / 10
+        : 0;
+      const timeSavedMin = manualTimeMin > 0 && robotTimeMin > 0
+        ? Math.round(manualTimeMin - robotTimeMin)
+        : 0;
+      const timeSavedPct = manualTimeMin > 0 && timeSavedMin > 0
+        ? Math.round((timeSavedMin / manualTimeMin) * 100)
+        : 0;
+
+      entries.push({
+        sport:              sportName,
+        manualTimeMin,
+        robotTimeMin,
+        timeSavedMin,
+        timeSavedPct,
+        laborSavingsDollar: sav?.laborSavingsDollar  ?? 0,
+        paintSavingsGal:    sav?.paintSavingsGal     ?? 0,
+        paintSavingsDollar: sav?.paintSavingsDollar  ?? 0,
+        totalSavingsDollar: sav?.totalSavingsDollar  ?? 0,
+        paintSavingsPct:    0,
+        fieldsPerDayManual: 0,
+        fieldsPerDayRobot:  0,
+        notes:              '',
+      });
+    }
 
     if (entries.length === 0) {
-      setTtCsvError('No valid sport rows found after header. Check that each data row has a sport name in the first column.');
+      setTtCsvError(
+        `Sections detected (${detectedSectionTypes.join(', ')}) but no sport rows found. ` +
+        'Check that sport names appear in the first column of each section.'
+      );
       return;
     }
     setTtCsvParsed(entries);
@@ -879,7 +964,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
                           <table className="min-w-full text-xs">
                             <thead className="bg-gray-50 dark:bg-gray-800">
                               <tr>
-                                {['Sport', 'Manual (min)', 'Robot (min)', 'Saved (min)', 'Saved (%)', 'Paint (%)', 'Fields/day M', 'Fields/day R', 'Notes'].map(col => (
+                                {['Sport', 'Manual (min)', 'Robot (min)', 'Time Saved (min)', 'Time Saved (%)', 'Labor Savings ($/yr)', 'Paint Saved (gal)', 'Paint Savings ($/yr)', 'Total Savings ($/yr)'].map(col => (
                                   <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
                                 ))}
                               </tr>
@@ -891,11 +976,11 @@ function TTKnowledgePanel({ password }: { password: string }) {
                                   <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.manualTimeMin || '—'}</td>
                                   <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.robotTimeMin || '—'}</td>
                                   <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedMin || '—'}</td>
-                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedPct || '—'}</td>
-                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.paintSavingsPct || '—'}</td>
-                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.fieldsPerDayManual || '—'}</td>
-                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.fieldsPerDayRobot || '—'}</td>
-                                  <td className="px-3 py-2 text-gray-500 dark:text-gray-500 max-w-xs truncate">{row.notes || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedPct ? `${row.timeSavedPct}%` : '—'}</td>
+                                  <td className="px-3 py-2 text-green-700 dark:text-green-400 font-medium">{row.laborSavingsDollar ? `$${Math.round(row.laborSavingsDollar).toLocaleString()}` : '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.paintSavingsGal ? `${row.paintSavingsGal.toFixed(0)} gal` : '—'}</td>
+                                  <td className="px-3 py-2 text-green-700 dark:text-green-400">{row.paintSavingsDollar ? `$${Math.round(row.paintSavingsDollar).toLocaleString()}` : '—'}</td>
+                                  <td className="px-3 py-2 text-green-700 dark:text-green-400 font-semibold">{row.totalSavingsDollar ? `$${Math.round(row.totalSavingsDollar).toLocaleString()}` : '—'}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -986,7 +1071,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
                         <table className="min-w-full text-xs">
                           <thead className="bg-gray-50 dark:bg-gray-800">
                             <tr>
-                              {['Sport', 'Manual (min)', 'Robot (min)', 'Saved (%)', 'Paint (%)', 'Fields/day M→R'].map(col => (
+                              {['Sport', 'Manual (min)', 'Robot (min)', 'Time Saved', 'Labor Savings/yr', 'Paint Savings/yr', 'Total Savings/yr'].map(col => (
                                 <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
                               ))}
                             </tr>
@@ -997,12 +1082,17 @@ function TTKnowledgePanel({ password }: { password: string }) {
                                 <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100 whitespace-nowrap">{row.sport}</td>
                                 <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.manualTimeMin || '—'}</td>
                                 <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.robotTimeMin || '—'}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.timeSavedPct ? `${row.timeSavedPct}%` : '—'}</td>
-                                <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.paintSavingsPct ? `${row.paintSavingsPct}%` : '—'}</td>
                                 <td className="px-3 py-2 text-gray-600 dark:text-gray-400">
-                                  {row.fieldsPerDayManual && row.fieldsPerDayRobot
-                                    ? `${row.fieldsPerDayManual} → ${row.fieldsPerDayRobot}`
-                                    : '—'}
+                                  {row.timeSavedMin ? `${row.timeSavedMin} min` : row.timeSavedPct ? `${row.timeSavedPct}%` : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-green-700 dark:text-green-400 font-medium">
+                                  {row.laborSavingsDollar ? `$${Math.round(row.laborSavingsDollar).toLocaleString()}` : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-green-700 dark:text-green-400">
+                                  {row.paintSavingsDollar ? `$${Math.round(row.paintSavingsDollar).toLocaleString()}` : '—'}
+                                </td>
+                                <td className="px-3 py-2 text-green-700 dark:text-green-400 font-semibold">
+                                  {row.totalSavingsDollar ? `$${Math.round(row.totalSavingsDollar).toLocaleString()}` : '—'}
                                 </td>
                               </tr>
                             ))}
