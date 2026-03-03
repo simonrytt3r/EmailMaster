@@ -266,7 +266,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
   const [ttSportsSaving, setTtSportsSaving] = useState(false);
   const [ttSportsSaved, setTtSportsSaved] = useState(false);
   const [ttDragging, setTtDragging] = useState(false);
-  const [ttImportMode, setTtImportMode] = useState<'replace' | 'merge'>('replace');
+  const [ttImportMode, setTtImportMode] = useState<'replace' | 'merge'>('merge');
   const [ttFileName, setTtFileName] = useState('');
   // maps field label → raw header string that was matched, or '' if not found
   const [ttColsFound, setTtColsFound] = useState<Record<string, string>>({});
@@ -1272,11 +1272,11 @@ function TTKnowledgePanel({ password }: { password: string }) {
                     </div>
                   )}
 
-                  {/* ── Currently stored (shown when no pending import) ── */}
-                  {ttSports.length > 0 && !ttCsvParsed && (
+                  {/* ── Currently stored (always visible when data exists) ── */}
+                  {ttSports.length > 0 && (
                     <div>
                       <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
-                        Currently stored — {ttSports.length} sports
+                        {ttCsvParsed ? '↓ Currently saved (will be updated on confirm)' : 'Currently stored'} — {ttSports.length} sport{ttSports.length !== 1 ? 's' : ''}
                       </h4>
                       <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
                         <table className="min-w-full text-xs">
