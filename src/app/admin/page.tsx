@@ -264,6 +264,8 @@ function TTKnowledgePanel({ password }: { password: string }) {
   // maps field label → raw header string that was matched, or '' if not found
   const [ttColsFound, setTtColsFound] = useState<Record<string, string>>({});
   const [ttRawHeaders, setTtRawHeaders] = useState<string[]>([]);
+  const [ttGSheetsUrl, setTtGSheetsUrl] = useState('');
+  const [ttGSheetsLoading, setTtGSheetsLoading] = useState(false);
   const csvFileRef = useRef<HTMLInputElement>(null);
 
   async function loadTTKnowledge() {
@@ -374,12 +376,31 @@ function TTKnowledgePanel({ password }: { password: string }) {
     }
 
     const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
-    const rawHeaders = parseCSVLine(lines[0]);
+
+    // Auto-detect the actual header row — skip title rows like "MANUAL MARKINGS".
+    // A header row has ≥2 non-empty cells and contains at least one recognizable
+    // column keyword (sport, time, labor, paint, cost, notes, min, gal, etc.).
+    function looksLikeHeaderRow(fields: string[]): boolean {
+      const normF = fields.map(f => normalize(f)).filter(Boolean);
+      if (normF.length < 2) return false;
+      const keywords = ['sport','time','labor','labour','paint','cost','note','min','gal','marking','robot','field','saving'];
+      return keywords.some(kw => normF.some(f => f.includes(kw)));
+    }
+
+    let headerIdx = 0;
+    for (let i = 0; i < Math.min(lines.length, 8); i++) {
+      if (looksLikeHeaderRow(parseCSVLine(lines[i]))) {
+        headerIdx = i;
+        break;
+      }
+    }
+
+    const rawHeaders = parseCSVLine(lines[headerIdx]);
     setTtRawHeaders(rawHeaders);
     const normHeaders = rawHeaders.map(h => normalize(h));
 
-    // Returns first column index that matches any of the keyword candidates,
-    // trying exact normalized match first, then substring match.
+    // Returns first column index that matches any of the keyword candidates.
+    // Tries exact normalized match first, then substring (header contains keyword).
     const findCol = (...candidates: string[]): number => {
       for (const c of candidates) {
         const norm = normalize(c);
@@ -388,32 +409,65 @@ function TTKnowledgePanel({ password }: { password: string }) {
       }
       for (const c of candidates) {
         const norm = normalize(c);
-        const idx = normHeaders.findIndex(h => h.includes(norm) || norm.includes(h));
+        const idx = normHeaders.findIndex(h => h.includes(norm));
         if (idx !== -1) return idx;
       }
       return -1;
     };
 
-    const colSport        = findCol('sport', 'sport name', 'sportname');
-    const colManual       = findCol('manual time', 'manual time min', 'time manual', 'manualmin', 'manual lining', 'manuallining');
-    const colRobot        = findCol('robot time', 'robot time min', 'tt time', 'turftank time', 'robotmin', 'robot lining', 'turfank');
-    const colSavedMin     = findCol('time saved min', 'timesavedmin', 'minutes saved', 'savedmin', 'time saved');
-    const colSavedPct     = findCol('time saved %', 'time saved pct', 'timesavedpct', 'time reduction', 'reduction %', 'time %');
-    const colPaint        = findCol('paint savings', 'paintsavings', 'paint %', 'paint reduction', 'paint saving');
-    const colManualFields = findCol('fields per day manual', 'fieldsperdaymanual', 'manual fields per day', 'fieldsmanual', 'fields manual', 'fields/day manual');
-    const colRobotFields  = findCol('fields per day robot', 'fieldsperdayrobot', 'robot fields per day', 'fieldsrobot', 'tt fields', 'fields robot', 'fields/day robot');
-    const colNotes        = findCol('notes', 'comments', 'additional notes', 'note');
+    // ── Column detection ────────────────────────────────────────────────────────
+    // Candidates listed most-specific → least-specific to avoid false matches.
+    const colSport    = findCol(
+      'sport', 'sport name', 'sportname',
+      'initial marking', 'initialmarking', 'marking',   // Google Sheets common name
+    );
+    const colManual   = findCol(
+      'manual time (min)', 'manual time min', 'manual time',
+      'labor time (m)', 'labor time m', 'labour time m', // "Labor Time (m)" = minutes
+      'time manual', 'manualmin', 'manual lining',
+    );
+    const colRobot    = findCol(
+      'robot time (min)', 'robot time min', 'robot time',
+      'tt time (min)', 'tt time min', 'tt time',
+      'turftank time', 'robotmin', 'robot lining',
+    );
+    const colSavedMin = findCol(
+      'time saved (min)', 'time saved min', 'timesavedmin',
+      'minutes saved', 'savedmin', 'time saved',
+    );
+    const colSavedPct = findCol(
+      'time saved (%)', 'time saved %', 'time saved pct', 'timesavedpct',
+      'time reduction (%)', 'time reduction', 'reduction %',
+    );
+    const colPaint    = findCol(
+      'paint savings (%)', 'paint savings %', 'paint savings', 'paintsavings',
+      'paint reduction', 'paint saving',
+      'paint (gal)', 'paint gal',   // absolute gal value — stored as paint field
+    );
+    const colManualFields = findCol(
+      'fields/day (manual)', 'fields per day manual', 'fieldsperdaymanual',
+      'manual fields per day', 'fields manual',
+    );
+    const colRobotFields = findCol(
+      'fields/day (robot)', 'fields/day (tt)', 'fields per day robot', 'fieldsperdayrobot',
+      'robot fields per day', 'tt fields',
+    );
+    const colNotes    = findCol('notes', 'comments', 'additional notes', 'note');
 
     if (colSport === -1) {
-      setTtCsvError('Could not find a "Sport" column. Check the column mapping table below to see what headers were detected.');
+      const detected = rawHeaders.filter(Boolean).join(', ');
+      setTtCsvError(
+        `Could not find a sport/name column. Headers detected: ${detected || '(none)'}. ` +
+        `See the recommended format below.`
+      );
       return;
     }
 
-    // Store the raw header that was matched for each field ('' = not matched)
+    // Store the raw header that matched each field ('' = not matched)
     setTtColsFound({
       'Sport':            rawHeaders[colSport] ?? '',
-      'Manual Time':      colManual       !== -1 ? rawHeaders[colManual]       : '',
-      'Robot Time':       colRobot        !== -1 ? rawHeaders[colRobot]        : '',
+      'Manual Time (min)':colManual       !== -1 ? rawHeaders[colManual]       : '',
+      'Robot Time (min)': colRobot        !== -1 ? rawHeaders[colRobot]        : '',
       'Time Saved (min)': colSavedMin     !== -1 ? rawHeaders[colSavedMin]     : '',
       'Time Saved (%)':   colSavedPct     !== -1 ? rawHeaders[colSavedPct]     : '',
       'Paint Savings':    colPaint        !== -1 ? rawHeaders[colPaint]        : '',
@@ -422,13 +476,16 @@ function TTKnowledgePanel({ password }: { password: string }) {
       'Notes':            colNotes        !== -1 ? rawHeaders[colNotes]        : '',
     });
 
-    // Strip non-numeric chars (handles "40%", "$1,200", trailing spaces) before parseFloat
+    // Strip non-numeric chars before parseFloat (handles "40%", "$1,200", etc.)
     const getNum = (cols: string[], idx: number) =>
       idx === -1 ? 0 : parseFloat((cols[idx]?.trim() ?? '').replace(/[^0-9.-]/g, '')) || 0;
     const getStr = (cols: string[], idx: number) =>
       idx === -1 ? '' : (cols[idx]?.trim() ?? '');
 
-    const entries: SportRow[] = lines.slice(1).map(line => {
+    // Data rows start after the detected header row; skip any sub-header rows
+    // (rows where the sport cell is empty or looks like a section title).
+    const dataLines = lines.slice(headerIdx + 1);
+    const entries: SportRow[] = dataLines.map(line => {
       const cols = parseCSVLine(line);
       return {
         sport:             getStr(cols, colSport),
@@ -441,13 +498,41 @@ function TTKnowledgePanel({ password }: { password: string }) {
         fieldsPerDayRobot: getNum(cols, colRobotFields),
         notes:             getStr(cols, colNotes),
       };
-    }).filter(e => e.sport);
+    }).filter(e => {
+      if (!e.sport) return false;
+      // Skip sub-header rows that look like section titles (e.g. "Overmarking")
+      const norm = normalize(e.sport);
+      return !['overmarking', 'initialmarking', 'marking'].includes(norm);
+    });
 
     if (entries.length === 0) {
-      setTtCsvError('No valid sport rows found. Check that each data row has a Sport value.');
+      setTtCsvError('No valid sport rows found after header. Check that each data row has a sport name in the first column.');
       return;
     }
     setTtCsvParsed(entries);
+  }
+
+  async function loadFromGSheets(url: string) {
+    setTtCsvError('');
+    setTtGSheetsLoading(true);
+    try {
+      const res = await fetch('/api/admin/tt-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'fetch-gsheets', url }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setTtCsvError(json.error ?? 'Failed to fetch sheet.');
+        return;
+      }
+      setTtCsvText(json.csv);
+      parseSportsCSV(json.csv, 'Google Sheets');
+    } catch {
+      setTtCsvError('Network error. Check your connection and try again.');
+    } finally {
+      setTtGSheetsLoading(false);
+    }
   }
 
   useEffect(() => {
@@ -555,20 +640,47 @@ function TTKnowledgePanel({ password }: { password: string }) {
 
                   {/* ── Upload zone (hidden once a file is parsed) ── */}
                   {!ttCsvParsed && (
-                    <div className="space-y-3">
-                      <div className="space-y-2">
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
-                          Upload your CSV from Google Sheets. Claude will use these exact numbers when generating emails for a specific sport.
-                        </p>
-                        <div className="bg-gray-50 dark:bg-gray-800 rounded-lg px-4 py-3 font-mono text-xs text-gray-600 dark:text-gray-400 overflow-x-auto whitespace-nowrap">
-                          Sport, Manual Time (min), Robot Time (min), Time Saved (min), Time Saved (%), Paint Savings (%), Fields Per Day (Manual), Fields Per Day (Robot), Notes
+                    <div className="space-y-4">
+
+                      {/* ── Option A: Google Sheets URL (preferred) ── */}
+                      <div className="rounded-xl border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20 p-4 space-y-3">
+                        <div className="flex items-center gap-2">
+                          <svg className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244" />
+                          </svg>
+                          <p className="text-sm font-medium text-green-700 dark:text-green-400">Import directly from Google Sheets (easiest)</p>
                         </div>
-                        <p className="text-xs text-gray-400 dark:text-gray-500">
-                          Column names are flexible — auto-detected by keyword. Only the &ldquo;Sport&rdquo; column is required.
-                        </p>
+                        <ol className="text-xs text-green-700 dark:text-green-500 space-y-1 list-decimal list-inside">
+                          <li>Open your Google Sheet → click <strong>Share</strong> → set to <strong>&ldquo;Anyone with the link can view&rdquo;</strong></li>
+                          <li>Copy the URL from your browser address bar</li>
+                          <li>Paste it below and click Load</li>
+                        </ol>
+                        <div className="flex gap-2">
+                          <input
+                            type="url"
+                            value={ttGSheetsUrl}
+                            onChange={(e) => setTtGSheetsUrl(e.target.value)}
+                            placeholder="https://docs.google.com/spreadsheets/d/…"
+                            className="flex-1 px-3 py-2 rounded-lg border border-green-200 dark:border-green-700 bg-white dark:bg-gray-900 text-sm text-gray-900 dark:text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500/40 font-mono text-xs"
+                          />
+                          <button
+                            onClick={() => loadFromGSheets(ttGSheetsUrl)}
+                            disabled={!ttGSheetsUrl.trim() || ttGSheetsLoading}
+                            className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 disabled:opacity-40 text-white text-sm font-medium whitespace-nowrap transition-colors"
+                          >
+                            {ttGSheetsLoading ? 'Loading…' : 'Load Sheet'}
+                          </button>
+                        </div>
                       </div>
 
-                      {/* Drop zone */}
+                      {/* ── Divider ── */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+                        <span className="text-xs text-gray-400 dark:text-gray-500">or upload a CSV file</span>
+                        <div className="flex-1 border-t border-gray-200 dark:border-gray-700" />
+                      </div>
+
+                      {/* ── Option B: CSV drop zone ── */}
                       <div
                         onClick={() => csvFileRef.current?.click()}
                         onDragOver={(e) => { e.preventDefault(); setTtDragging(true); }}
@@ -586,24 +698,69 @@ function TTKnowledgePanel({ password }: { password: string }) {
                           };
                           reader.readAsText(file);
                         }}
-                        className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-8 cursor-pointer transition-colors ${
+                        className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-6 cursor-pointer transition-colors ${
                           ttDragging
                             ? 'border-green-500 bg-green-50 dark:bg-green-950/20'
                             : 'border-gray-300 dark:border-gray-600 hover:border-green-400 dark:hover:border-green-600 hover:bg-gray-50 dark:hover:bg-gray-800/50'
                         }`}
                       >
-                        <svg className={`w-8 h-8 ${ttDragging ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                        <svg className={`w-7 h-7 ${ttDragging ? 'text-green-500' : 'text-gray-400'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
                         </svg>
                         <div className="text-center">
-                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                            Drop your .csv file here
-                          </span>
+                          <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Drop .csv here</span>
                           <span className="text-sm text-gray-500 dark:text-gray-400"> or </span>
                           <span className="text-sm font-medium text-green-600 dark:text-green-400">browse</span>
                         </div>
-                        <p className="text-xs text-gray-400 dark:text-gray-500">Google Sheets → File → Download → CSV</p>
+                        <p className="text-xs text-gray-400 dark:text-gray-500">Google Sheets → File → Download → Comma Separated Values (.csv)</p>
                       </div>
+
+                      {/* ── Recommended column format ── */}
+                      <details className="group">
+                        <summary className="text-xs text-gray-400 dark:text-gray-500 cursor-pointer select-none hover:text-gray-600 dark:hover:text-gray-300 list-none flex items-center gap-1">
+                          <span className="group-open:hidden">▶</span>
+                          <span className="hidden group-open:inline">▼</span>
+                          Recommended column format for your sheet
+                        </summary>
+                        <div className="mt-3 space-y-2">
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            For best results, structure your sheet as a flat table with these column headers. You can use your own names — the system detects by keyword. Only <strong>Sport</strong> is required.
+                          </p>
+                          <div className="overflow-x-auto rounded-lg border border-gray-200 dark:border-gray-700">
+                            <table className="min-w-full text-xs">
+                              <thead className="bg-gray-50 dark:bg-gray-800">
+                                <tr>
+                                  {['Column header', 'What it stores', 'Example value'].map(h => (
+                                    <th key={h} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-100 dark:divide-gray-800 bg-white dark:bg-gray-900">
+                                {[
+                                  ['Sport', 'Sport name', 'Football'],
+                                  ['Manual Time (min)', 'Manual marking time in minutes', '1440'],
+                                  ['Robot Time (min)', 'TT robot marking time in minutes', '90'],
+                                  ['Time Saved (min)', 'Minutes saved per marking', '1350'],
+                                  ['Time Saved (%)', '% time reduction', '94'],
+                                  ['Paint Savings (%)', '% less paint used', '15'],
+                                  ['Fields/Day Manual', 'Fields a human can mark per day', '1'],
+                                  ['Fields/Day Robot', 'Fields TT can mark per day', '8'],
+                                  ['Notes', 'Any context for Claude', 'Based on 11v11 pitch'],
+                                ].map(([col, desc, ex]) => (
+                                  <tr key={col}>
+                                    <td className="px-3 py-2 font-mono text-green-700 dark:text-green-400 whitespace-nowrap">{col}</td>
+                                    <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{desc}</td>
+                                    <td className="px-3 py-2 text-gray-500 dark:text-gray-500 font-mono">{ex}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <p className="text-xs text-gray-400 dark:text-gray-500">
+                            Tip: column names are matched by keyword so &ldquo;Labor Time (m)&rdquo;, &ldquo;Manual Marking Time&rdquo;, or &ldquo;Time Manual (min)&rdquo; all map to <em>Manual Time</em>.
+                          </p>
+                        </div>
+                      </details>
 
                       {/* Paste fallback */}
                       <details className="group">

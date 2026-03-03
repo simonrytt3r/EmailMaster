@@ -34,6 +34,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, updatedAt: data.updatedAt });
     }
 
+    // ── Fetch Google Sheets as CSV (server-side proxy to avoid CORS) ─────────
+    if (action === 'fetch-gsheets') {
+      const rawUrl = typeof body.url === 'string' ? body.url.trim() : '';
+      const idMatch = rawUrl.match(/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      if (!idMatch) {
+        return NextResponse.json({
+          success: false,
+          error: 'Could not find a spreadsheet ID in that URL. Copy the full URL from your browser address bar.',
+        });
+      }
+      const sheetId = idMatch[1];
+      const gidMatch = rawUrl.match(/[#?&]gid=(\d+)/);
+      const gid = gidMatch ? gidMatch[1] : '0';
+      const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
+      try {
+        const sheetRes = await fetch(csvUrl, { redirect: 'follow' });
+        if (!sheetRes.ok) {
+          const hint = sheetRes.status === 401 || sheetRes.status === 403
+            ? 'Make sure the sheet is shared as "Anyone with the link can view".'
+            : `HTTP ${sheetRes.status}.`;
+          return NextResponse.json({ success: false, error: `Could not access the sheet. ${hint}` });
+        }
+        const csv = await sheetRes.text();
+        return NextResponse.json({ success: true, csv });
+      } catch (fetchErr) {
+        const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+        return NextResponse.json({ success: false, error: `Network error fetching sheet: ${msg}` });
+      }
+    }
+
     // ── Save sports data ──────────────────────────────────────────────────────
     if (action === 'save-sports') {
       const sports: SportDataEntry[] = Array.isArray(body.sports) ? body.sports : [];
