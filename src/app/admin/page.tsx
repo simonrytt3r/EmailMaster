@@ -273,6 +273,10 @@ function TTKnowledgePanel({ password }: { password: string }) {
   const [ttRawHeaders, setTtRawHeaders] = useState<string[]>([]);
   const [ttGSheetsUrl, setTtGSheetsUrl] = useState('');
   const [ttGSheetsLoading, setTtGSheetsLoading] = useState(false);
+  const [ttRobotUrl, setTtRobotUrl] = useState('');
+  const [ttRobotLoading, setTtRobotLoading] = useState(false);
+  const [ttRobotLoaded, setTtRobotLoaded] = useState(false);
+  const [ttRobotError, setTtRobotError] = useState('');
   const csvFileRef = useRef<HTMLInputElement>(null);
 
   async function loadTTKnowledge() {
@@ -338,6 +342,8 @@ function TTKnowledgePanel({ password }: { password: string }) {
         setTtFileName('');
         setTtColsFound({});
         setTtRawHeaders([]);
+        setTtRobotLoaded(false);
+        setTtRobotError('');
         setTtSportsSaved(true);
         setTtUpdatedAt(json.updatedAt ?? '');
         setTimeout(() => setTtSportsSaved(false), 3000);
@@ -617,6 +623,157 @@ function TTKnowledgePanel({ password }: { password: string }) {
       setTtCsvError('Network error. Check your connection and try again.');
     } finally {
       setTtGSheetsLoading(false);
+    }
+  }
+
+  /**
+   * Parses a flat-table CSV that contains robot/TT marking times and merges
+   * those times into the already-parsed ttCsvParsed entries.
+   * Handles any flat structure: Sport | Robot Time (min), or
+   * Sport | IM Time (min) | OM Time (min), etc.
+   */
+  function mergeRobotTimesFromCSV(csvText: string): { merged: number; robotMap: Map<string, number>; colInfo: string } {
+    const normalized = csvText.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    const allLines = normalized.split('\n');
+
+    function parseCSVLine(line: string): string[] {
+      const fields: string[] = []; let cur = ''; let inQ = false;
+      for (let i = 0; i < line.length; i++) {
+        const ch = line[i];
+        if (ch === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else { inQ = !inQ; } }
+        else if (ch === ',' && !inQ) { fields.push(cur.trim()); cur = ''; }
+        else { cur += ch; }
+      }
+      fields.push(cur.trim()); return fields;
+    }
+
+    const n = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const getNum = (row: string[], idx: number) =>
+      idx < 0 ? 0 : parseFloat((row[idx]?.trim() ?? '').replace(/[^0-9.-]/g, '')) || 0;
+
+    // Find the header row (first line with ≥2 non-empty cells containing keywords)
+    const TIME_KW = ['time','labor','labour','min','hour','robot','tt','turftank','marking','sport'];
+    let headerIdx = -1;
+    for (let i = 0; i < Math.min(allLines.length, 10); i++) {
+      const f = parseCSVLine(allLines[i]);
+      const nonEmpty = f.filter(c => c.trim());
+      if (nonEmpty.length >= 2 && TIME_KW.some(kw => nonEmpty.some(c => c.toLowerCase().includes(kw)))) {
+        headerIdx = i; break;
+      }
+    }
+    if (headerIdx === -1) return { merged: 0, robotMap: new Map(), colInfo: 'No recognizable header found' };
+
+    const headers = parseCSVLine(allLines[headerIdx]);
+    const normH = headers.map(h => n(h));
+
+    const fc = (...cands: string[]) => {
+      for (const c of cands) { const idx = normH.findIndex(h => h === n(c)); if (idx !== -1) return idx; }
+      for (const c of cands) { const idx = normH.findIndex(h => h.includes(n(c))); if (idx !== -1) return idx; }
+      return -1;
+    };
+
+    // Sport column: first non-empty header that looks like a name column
+    const colSport = fc('sport','sport name','initial marking','marking','name');
+    if (colSport === -1) return { merged: 0, robotMap: new Map(), colInfo: `Headers: ${headers.filter(Boolean).join(', ')}` };
+
+    // Robot/TT time column — try several naming conventions
+    // Prefer explicit "robot" / "tt" / "turftank" names; fall back to first numeric-looking column
+    const colRobotTime = fc(
+      'robot time (min)', 'robot time min', 'robot time',
+      'tt time (min)', 'tt time min', 'tt time',
+      'turftank time', 'turf tank time',
+      'machine time', 'auto time', 'autonomous time',
+      'time (min)', 'time min', 'time',   // broad fallback
+    );
+
+    // Also look for separate IM / OM time columns for a weighted average
+    const colIMTime = fc('im time', 'initial time', 'initial marking time', 'im (min)', 'im min');
+    const colOMTime = fc('om time', 'overmarking time', 'overmark time', 'om (min)', 'om min');
+    const colIMPerYear = fc('im per year', 'im/year', 'imperyear', 'initial per year');
+    const colOMPerYear = fc('om per year', 'om/year', 'omperyear', 'overmarking per year');
+
+    // Annual labor hours + events (same as in the main tab TT Per Year section)
+    const colLaborH    = fc('labor time (h)', 'labour time h', 'labor time h', 'time (h)', 'labor (h)');
+    const colTotalEvents = fc('total events', 'events per year', 'total markings');
+
+    const robotMap = new Map<string, number>();
+    const dataLines = allLines.slice(headerIdx + 1).filter(l => l.trim());
+
+    for (const line of dataLines) {
+      const row = parseCSVLine(line);
+      const sport = row[colSport]?.trim();
+      if (!sport) continue;
+
+      let robotMin = 0;
+
+      if (colRobotTime >= 0) {
+        // Direct robot time column in minutes
+        robotMin = getNum(row, colRobotTime);
+      } else if (colIMTime >= 0 && colOMTime >= 0 && colIMPerYear >= 0 && colOMPerYear >= 0) {
+        // Separate IM + OM times with event counts → weighted per-event average
+        const imT = getNum(row, colIMTime);
+        const omT = getNum(row, colOMTime);
+        const imY = getNum(row, colIMPerYear);
+        const omY = getNum(row, colOMPerYear);
+        const totalEv = imY + omY;
+        robotMin = totalEv > 0 ? (imT * imY + omT * omY) / totalEv : imT;
+      } else if (colLaborH >= 0) {
+        // Annual labor hours — derive per-event like the main parser
+        const laborH = getNum(row, colLaborH);
+        const imY = colIMPerYear >= 0 ? getNum(row, colIMPerYear) : 1;
+        const omY = colOMPerYear >= 0 ? getNum(row, colOMPerYear) : 0;
+        const totalEv = imY + omY || 1;
+        robotMin = Math.round((laborH / totalEv) * 60 * 10) / 10;
+      } else if (colIMTime >= 0) {
+        robotMin = getNum(row, colIMTime);
+      }
+
+      if (robotMin > 0) robotMap.set(sport.toLowerCase(), robotMin);
+    }
+
+    // Which column name ended up being used
+    const usedCol = colRobotTime >= 0 ? headers[colRobotTime]
+      : colIMTime >= 0 ? headers[colIMTime]
+      : colLaborH >= 0 ? headers[colLaborH]
+      : '(none)';
+
+    return { merged: robotMap.size, robotMap, colInfo: usedCol };
+  }
+
+  async function loadRobotTimesFromTab(url: string) {
+    setTtRobotError('');
+    setTtRobotLoading(true);
+    setTtRobotLoaded(false);
+    try {
+      const res = await fetch('/api/admin/tt-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'fetch-gsheets', url }),
+      });
+      const json = await res.json();
+      if (!json.success) { setTtRobotError(json.error ?? 'Failed to fetch tab.'); return; }
+
+      const { merged, robotMap, colInfo } = mergeRobotTimesFromCSV(json.csv);
+      if (merged === 0) {
+        setTtRobotError(`No robot times found. Column used: ${colInfo}. Check column names in that tab.`);
+        return;
+      }
+
+      // Merge robot times into the parsed results
+      setTtCsvParsed(prev => prev?.map(row => {
+        const rt = robotMap.get(row.sport.toLowerCase()) ?? 0;
+        if (!rt) return row;
+        const timeSavedMin = row.manualTimeMin > 0 ? Math.round(row.manualTimeMin - rt) : 0;
+        const timeSavedPct = row.manualTimeMin > 0 && timeSavedMin > 0
+          ? Math.round((timeSavedMin / row.manualTimeMin) * 100) : 0;
+        return { ...row, robotTimeMin: rt, timeSavedMin, timeSavedPct };
+      }) ?? null);
+
+      setTtRobotLoaded(true);
+    } catch {
+      setTtRobotError('Network error. Check your connection.');
+    } finally {
+      setTtRobotLoading(false);
     }
   }
 
@@ -900,6 +1057,8 @@ function TTKnowledgePanel({ password }: { password: string }) {
                             setTtColsFound({});
                             setTtRawHeaders([]);
                             setTtCsvError('');
+                            setTtRobotLoaded(false);
+                            setTtRobotError('');
                           }}
                           className="text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
                         >
@@ -988,6 +1147,56 @@ function TTKnowledgePanel({ password }: { password: string }) {
                         </div>
                       </div>
 
+                      {/* ── Robot times from a second tab ── */}
+                      {!ttRobotLoaded && (
+                        <div className="rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/20 p-4 space-y-3">
+                          <div>
+                            <p className="text-sm font-medium text-blue-800 dark:text-blue-300">
+                              Robot times in a separate tab?
+                            </p>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-0.5">
+                              Paste the URL of the tab that contains Turf Tank robot/operator times. The data will be merged into the preview above.
+                            </p>
+                          </div>
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={ttRobotUrl}
+                              onChange={e => setTtRobotUrl(e.target.value)}
+                              placeholder="https://docs.google.com/spreadsheets/d/…?gid=…"
+                              className="flex-1 rounded-lg border border-blue-200 dark:border-blue-700 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 text-sm px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                            <button
+                              onClick={() => loadRobotTimesFromTab(ttRobotUrl)}
+                              disabled={ttRobotLoading || !ttRobotUrl.trim()}
+                              className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition-colors whitespace-nowrap"
+                            >
+                              {ttRobotLoading ? 'Loading…' : 'Load Robot Times'}
+                            </button>
+                          </div>
+                          {ttRobotError && (
+                            <p className="text-xs text-red-600 dark:text-red-400">{ttRobotError}</p>
+                          )}
+                          <p className="text-xs text-blue-500 dark:text-blue-500">
+                            Skip this if robot times are already in your main sheet or you&apos;ll fill them in manually.
+                          </p>
+                        </div>
+                      )}
+                      {ttRobotLoaded && (
+                        <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+                          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                          </svg>
+                          Robot times merged — preview updated above.
+                          <button
+                            onClick={() => { setTtRobotLoaded(false); setTtRobotError(''); }}
+                            className="ml-auto text-xs text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 underline"
+                          >
+                            Load different tab
+                          </button>
+                        </div>
+                      )}
+
                       {/* Import mode — only shown when existing data present */}
                       {ttSports.length > 0 && (
                         <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-xl p-4 space-y-3">
@@ -1052,6 +1261,8 @@ function TTKnowledgePanel({ password }: { password: string }) {
                             setTtColsFound({});
                             setTtRawHeaders([]);
                             setTtCsvError('');
+                            setTtRobotLoaded(false);
+                            setTtRobotError('');
                           }}
                           className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 text-sm transition-colors"
                         >
