@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getTTKnowledge, saveTTKnowledge } from '@/lib/tt-knowledge';
-import type { SportDataEntry } from '@/lib/tt-knowledge';
+import type { SportDataEntry, SportTimeEntry } from '@/lib/tt-knowledge';
 
 export const runtime = 'nodejs';
 
@@ -72,6 +72,23 @@ export async function POST(request: NextRequest) {
       data.updatedAt = new Date().toISOString();
       saveTTKnowledge(data);
       return NextResponse.json({ success: true, count: sports.length, updatedAt: data.updatedAt });
+    }
+
+    // ── Save sport times (separate times-only table) ──────────────────────────
+    if (action === 'save-sport-times') {
+      const incoming: SportTimeEntry[] = Array.isArray(body.sportTimes) ? body.sportTimes : [];
+      const data = getTTKnowledge();
+      if (body.mode === 'merge') {
+        const existing = data.sportTimes ?? [];
+        const incomingNames = new Set(incoming.map((s) => s.sport.toLowerCase()));
+        const kept = existing.filter((s) => !incomingNames.has(s.sport.toLowerCase()));
+        data.sportTimes = [...kept, ...incoming];
+      } else {
+        data.sportTimes = incoming;
+      }
+      data.updatedAt = new Date().toISOString();
+      saveTTKnowledge(data);
+      return NextResponse.json({ success: true, count: data.sportTimes.length, updatedAt: data.updatedAt });
     }
 
     return NextResponse.json({ error: 'Unknown action.' }, { status: 400 });

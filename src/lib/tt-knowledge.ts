@@ -22,9 +22,16 @@ export interface SportDataEntry {
   notes: string;
 }
 
+export interface SportTimeEntry {
+  sport: string;
+  manualTimeMin: number;
+  ttTimeMin: number;
+}
+
 export interface TTKnowledge {
   narrative: string;
   sports: SportDataEntry[];
+  sportTimes: SportTimeEntry[];
   updatedAt: string;
 }
 
@@ -37,7 +44,7 @@ export function getTTKnowledge(): TTKnowledge {
     const raw = fs.readFileSync(DATA_PATH, 'utf-8');
     return JSON.parse(raw) as TTKnowledge;
   } catch {
-    return { narrative: '', sports: [], updatedAt: '' };
+    return { narrative: '', sports: [], sportTimes: [], updatedAt: '' };
   }
 }
 
@@ -81,34 +88,46 @@ export function getSportProofPoints(industry?: string): string {
   if (!industry?.trim()) return '';
 
   const knowledge = getTTKnowledge();
-  if (!knowledge.sports?.length) return '';
-
   const lowerIndustry = industry.toLowerCase();
-  const match = knowledge.sports.find(
-    (s) =>
-      lowerIndustry.includes(s.sport.toLowerCase()) ||
-      s.sport.toLowerCase().includes(lowerIndustry.split(',')[0].trim())
-  );
 
-  if (!match) return '';
+  const sportMatch = (name: string) =>
+    lowerIndustry.includes(name.toLowerCase()) ||
+    name.toLowerCase().includes(lowerIndustry.split(',')[0].trim());
 
+  // Look up full savings entry
+  const match = knowledge.sports?.find((s) => sportMatch(s.sport));
+
+  // Look up time-only entry (separate sport times table)
+  const timeMatch = knowledge.sportTimes?.find((s) => sportMatch(s.sport));
+
+  if (!match && !timeMatch) return '';
+
+  const sportName = match?.sport ?? timeMatch!.sport;
   const lines: string[] = [
-    `\n## SPORT-SPECIFIC PROOF POINTS: ${match.sport}`,
+    `\n## SPORT-SPECIFIC PROOF POINTS: ${sportName}`,
     `Use these exact numbers in subject lines, opening lines, and proof points:`,
   ];
 
-  if (match.manualTimeMin) lines.push(`- Manual marking time: ${match.manualTimeMin} min per event`);
-  if (match.robotTimeMin) lines.push(`- Turf Tank operator time: ~${match.robotTimeMin} min per event (robot marks autonomously)`);
-  if (match.timeSavedMin) lines.push(`- Time saved per marking: ${match.timeSavedMin} min (${match.timeSavedPct}%)`);
-  if (match.laborSavingsDollar) lines.push(`- Annual labor cost savings: $${Math.round(match.laborSavingsDollar).toLocaleString()}`);
-  if (match.paintSavingsGal) lines.push(`- Annual paint saved: ${match.paintSavingsGal.toFixed(0)} gallons`);
-  if (match.paintSavingsDollar) lines.push(`- Annual paint cost savings: $${Math.round(match.paintSavingsDollar).toLocaleString()}`);
-  if (match.totalSavingsDollar) lines.push(`- TOTAL annual savings with Turf Tank: $${Math.round(match.totalSavingsDollar).toLocaleString()}`);
-  if (match.paintSavingsPct) lines.push(`- Paint savings: ${match.paintSavingsPct}%`);
-  if (match.fieldsPerDayManual && match.fieldsPerDayRobot) {
+  // Time comparison — prefer sportTimes if both present (dedicated source)
+  const manualMin = timeMatch?.manualTimeMin ?? match?.manualTimeMin;
+  const ttMin     = timeMatch?.ttTimeMin     ?? match?.robotTimeMin;
+  const savedMin  = manualMin && ttMin ? Math.round(manualMin - ttMin) : match?.timeSavedMin;
+  const savedPct  = manualMin && savedMin ? Math.round((savedMin / manualMin) * 100) : match?.timeSavedPct;
+
+  if (manualMin) lines.push(`- Manual marking time: ${manualMin} min per field`);
+  if (ttMin)     lines.push(`- Turf Tank time: ~${ttMin} min per field (robot marks autonomously)`);
+  if (savedMin)  lines.push(`- Time saved per marking: ${savedMin} min${savedPct ? ` (${savedPct}%)` : ''}`);
+
+  // Savings data (from the full savings import if available)
+  if (match?.laborSavingsDollar) lines.push(`- Annual labor cost savings: $${Math.round(match.laborSavingsDollar).toLocaleString()}`);
+  if (match?.paintSavingsGal)    lines.push(`- Annual paint saved: ${match.paintSavingsGal.toFixed(0)} gallons`);
+  if (match?.paintSavingsDollar) lines.push(`- Annual paint cost savings: $${Math.round(match.paintSavingsDollar).toLocaleString()}`);
+  if (match?.totalSavingsDollar) lines.push(`- TOTAL annual savings with Turf Tank: $${Math.round(match.totalSavingsDollar).toLocaleString()}`);
+  if (match?.paintSavingsPct)    lines.push(`- Paint savings: ${match.paintSavingsPct}%`);
+  if (match?.fieldsPerDayManual && match?.fieldsPerDayRobot) {
     lines.push(`- Daily field capacity: from ${match.fieldsPerDayManual} to ${match.fieldsPerDayRobot} fields/day`);
   }
-  if (match.notes?.trim()) lines.push(`- Context: ${match.notes.trim()}`);
+  if (match?.notes?.trim()) lines.push(`- Context: ${match.notes.trim()}`);
 
   lines.push('');
   return lines.join('\n');

@@ -89,6 +89,12 @@ interface NpsEntryLocal {
   lastName?: string;
 }
 
+interface SportTimeEntry {
+  sport: string;
+  manualTimeMin: number;
+  ttTimeMin: number;
+}
+
 interface SportRow {
   sport: string;
   // Per-event time comparison
@@ -253,7 +259,7 @@ function UpdateCard({
 
 function TTKnowledgePanel({ password }: { password: string }) {
   const [ttOpen, setTtOpen] = useState(false);
-  const [ttTab, setTtTab] = useState<'narrative' | 'sports'>('narrative');
+  const [ttTab, setTtTab] = useState<'narrative' | 'sports' | 'times'>('narrative');
   const [ttNarrative, setTtNarrative] = useState('');
   const [ttSports, setTtSports] = useState<SportRow[]>([]);
   const [ttUpdatedAt, setTtUpdatedAt] = useState('');
@@ -279,6 +285,21 @@ function TTKnowledgePanel({ password }: { password: string }) {
   const [ttRobotError, setTtRobotError] = useState('');
   const csvFileRef = useRef<HTMLInputElement>(null);
 
+  // ── Sport Times state (separate column-mapped import) ────────────────────
+  const [ttSportTimes, setTtSportTimes] = useState<SportTimeEntry[]>([]);
+  const [stUrl, setStUrl] = useState('');
+  const [stLoading, setStLoading] = useState(false);
+  const [stCsvText, setStCsvText] = useState('');
+  const [stRawHeaders, setStRawHeaders] = useState<string[]>([]);
+  const [stColSport, setStColSport] = useState('');
+  const [stColManual, setStColManual] = useState('');
+  const [stColTT, setStColTT] = useState('');
+  const [stParsed, setStParsed] = useState<SportTimeEntry[] | null>(null);
+  const [stError, setStError] = useState('');
+  const [stSaving, setStSaving] = useState(false);
+  const [stSaved, setStSaved] = useState(false);
+  const [stImportMode, setStImportMode] = useState<'merge' | 'replace'>('merge');
+
   async function loadTTKnowledge() {
     setTtLoading(true);
     try {
@@ -291,6 +312,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
       if (json.success) {
         setTtNarrative(json.narrative ?? '');
         setTtSports(json.sports ?? []);
+        setTtSportTimes(json.sportTimes ?? []);
         setTtUpdatedAt(json.updatedAt ?? '');
       }
     } catch { /* silent */ }
@@ -777,6 +799,85 @@ function TTKnowledgePanel({ password }: { password: string }) {
     }
   }
 
+  // ── Sport Times helpers ──────────────────────────────────────────────────
+
+  function parseStCSVLine(line: string): string[] {
+    const fields: string[] = []; let cur = ''; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const ch = line[i];
+      if (ch === '"') { if (inQ && line[i + 1] === '"') { cur += '"'; i++; } else { inQ = !inQ; } }
+      else if (ch === ',' && !inQ) { fields.push(cur.trim()); cur = ''; }
+      else { cur += ch; }
+    }
+    fields.push(cur.trim()); return fields;
+  }
+
+  async function loadSportTimesSheet(url: string) {
+    setStError(''); setStLoading(true); setStParsed(null); setStRawHeaders([]);
+    setStColSport(''); setStColManual(''); setStColTT('');
+    try {
+      const res = await fetch('/api/admin/tt-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'fetch-gsheets', url }),
+      });
+      const json = await res.json();
+      if (!json.success) { setStError(json.error ?? 'Failed to fetch sheet.'); return; }
+      const lines = (json.csv as string).trim().split(/\r?\n/).filter((l: string) => l.trim());
+      if (!lines.length) { setStError('No data found in that sheet tab.'); return; }
+      setStCsvText(json.csv);
+      setStRawHeaders(parseStCSVLine(lines[0]).filter(Boolean));
+    } catch { setStError('Network error.'); }
+    finally { setStLoading(false); }
+  }
+
+  function previewSportTimes() {
+    if (!stCsvText || !stColSport || !stColManual || !stColTT) return;
+    const lines = stCsvText.trim().split(/\r?\n/).filter((l: string) => l.trim());
+    if (lines.length < 2) { setStError('No data rows found.'); return; }
+    const headers = parseStCSVLine(lines[0]);
+    const iSport  = headers.indexOf(stColSport);
+    const iManual = headers.indexOf(stColManual);
+    const iTT     = headers.indexOf(stColTT);
+    if (iSport < 0 || iManual < 0 || iTT < 0) { setStError('Column not found — try reloading.'); return; }
+    const getNum = (val: string) => parseFloat((val ?? '').replace(/[^0-9.-]/g, '')) || 0;
+    const rows: SportTimeEntry[] = [];
+    for (const line of lines.slice(1)) {
+      const f = parseStCSVLine(line);
+      const sport = f[iSport]?.trim();
+      if (!sport) continue;
+      const manualTimeMin = getNum(f[iManual]);
+      const ttTimeMin     = getNum(f[iTT]);
+      if (sport && (manualTimeMin || ttTimeMin)) rows.push({ sport, manualTimeMin, ttTimeMin });
+    }
+    if (!rows.length) { setStError('No valid rows found with those columns.'); return; }
+    setStError('');
+    setStParsed(rows);
+  }
+
+  async function saveSportTimes(rows: SportTimeEntry[]) {
+    setStSaving(true); setStSaved(false);
+    try {
+      const res = await fetch('/api/admin/tt-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'save-sport-times', sportTimes: rows, mode: stImportMode }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setStSaved(true);
+        setStParsed(null);
+        setStRawHeaders([]);
+        setStCsvText('');
+        setStColSport(''); setStColManual(''); setStColTT('');
+        await loadTTKnowledge();
+      } else {
+        setStError(json.error ?? 'Save failed.');
+      }
+    } catch { setStError('Network error.'); }
+    finally { setStSaving(false); }
+  }
+
   useEffect(() => {
     loadTTKnowledge();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -807,7 +908,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
             <>
               {/* Tab bar */}
               <div className="flex border-b border-gray-200 dark:border-gray-800">
-                {(['narrative', 'sports'] as const).map((tab) => (
+                {(['narrative', 'sports', 'times'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setTtTab(tab)}
@@ -819,7 +920,9 @@ function TTKnowledgePanel({ password }: { password: string }) {
                   >
                     {tab === 'narrative'
                       ? 'Sales Intelligence'
-                      : `Sports Data${ttSports.length > 0 ? ` (${ttSports.length})` : ''}`}
+                      : tab === 'sports'
+                      ? `Savings Data${ttSports.length > 0 ? ` (${ttSports.length})` : ''}`
+                      : `Sport Times${ttSportTimes.length > 0 ? ` (${ttSportTimes.length})` : ''}`}
                   </button>
                 ))}
               </div>
@@ -1322,6 +1425,181 @@ function TTKnowledgePanel({ password }: { password: string }) {
                   )}
                 </div>
               )}
+              {/* Sport Times tab */}
+              {ttTab === 'times' && (
+                <div className="px-6 py-5 space-y-5">
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    Import Manual vs Turf Tank time per field for each sport. Column names don&apos;t matter — map them below after loading. Used by Claude to mention specific times in emails (e.g. &ldquo;a football field takes 12 min with Turf Tank vs 90 min manually&rdquo;).
+                  </p>
+
+                  {/* URL input */}
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={stUrl}
+                      onChange={(e) => setStUrl(e.target.value)}
+                      placeholder="Paste Google Sheet tab URL…"
+                      className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                    />
+                    <button
+                      onClick={() => loadSportTimesSheet(stUrl)}
+                      disabled={!stUrl.trim() || stLoading}
+                      className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium disabled:opacity-40 transition-colors whitespace-nowrap"
+                    >
+                      {stLoading ? 'Loading…' : 'Load sheet'}
+                    </button>
+                  </div>
+
+                  {stError && (
+                    <p className="text-sm text-red-500 dark:text-red-400">{stError}</p>
+                  )}
+
+                  {/* Column mapper — shown once headers are detected */}
+                  {stRawHeaders.length > 0 && !stParsed && (
+                    <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-4">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                        Map columns ({stRawHeaders.length} detected)
+                      </p>
+                      {([
+                        { label: 'Sport name column', value: stColSport, set: setStColSport },
+                        { label: 'Manual time (min) column', value: stColManual, set: setStColManual },
+                        { label: 'Turf Tank time (min) column', value: stColTT, set: setStColTT },
+                      ] as { label: string; value: string; set: (v: string) => void }[]).map(({ label, value, set }) => (
+                        <div key={label} className="flex items-center gap-3">
+                          <span className="text-sm text-gray-600 dark:text-gray-400 w-52 shrink-0">{label}</span>
+                          <select
+                            value={value}
+                            onChange={(e) => set(e.target.value)}
+                            className="flex-1 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-sm focus:outline-none focus:ring-2 focus:ring-green-500/40"
+                          >
+                            <option value="">— pick a column —</option>
+                            {stRawHeaders.map((h) => (
+                              <option key={h} value={h}>{h}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                      <button
+                        onClick={previewSportTimes}
+                        disabled={!stColSport || !stColManual || !stColTT}
+                        className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium disabled:opacity-40 transition-colors"
+                      >
+                        Preview
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Preview table */}
+                  {stParsed && (
+                    <div className="space-y-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+                        Preview — {stParsed.length} sport{stParsed.length !== 1 ? 's' : ''}
+                      </p>
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                              {['Sport', 'Manual (min)', 'Turf Tank (min)', 'Time saved'].map((col) => (
+                                <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {stParsed.map((row, i) => {
+                              const saved = row.manualTimeMin && row.ttTimeMin ? Math.round(row.manualTimeMin - row.ttTimeMin) : null;
+                              const pct   = saved && row.manualTimeMin ? Math.round((saved / row.manualTimeMin) * 100) : null;
+                              return (
+                                <tr key={i} className="bg-white dark:bg-gray-900">
+                                  <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{row.sport}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.manualTimeMin || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.ttTimeMin || '—'}</td>
+                                  <td className="px-3 py-2 text-green-700 dark:text-green-400 font-medium">
+                                    {saved ? `${saved} min${pct ? ` (${pct}%)` : ''}` : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Import mode */}
+                      {ttSportTimes.length > 0 && (
+                        <div className="flex items-center gap-4 text-sm">
+                          {(['merge', 'replace'] as const).map((m) => (
+                            <label key={m} className="flex items-center gap-1.5 cursor-pointer">
+                              <input type="radio" name="stMode" value={m} checked={stImportMode === m} onChange={() => setStImportMode(m)} />
+                              <span className="text-gray-700 dark:text-gray-300">
+                                {m === 'merge' ? 'Merge (keep existing, update matches)' : 'Replace all'}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => saveSportTimes(stParsed)}
+                          disabled={stSaving}
+                          className="px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white text-sm font-medium disabled:opacity-40 transition-colors"
+                        >
+                          {stSaving ? 'Saving…' : `Save ${stParsed.length} sport${stParsed.length !== 1 ? 's' : ''}`}
+                        </button>
+                        <button
+                          onClick={() => { setStParsed(null); setStRawHeaders([]); setStCsvText(''); setStColSport(''); setStColManual(''); setStColTT(''); }}
+                          className="px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-600 dark:text-gray-400 text-sm transition-colors"
+                        >
+                          Discard
+                        </button>
+                        {stSaved && <span className="text-sm text-green-600 dark:text-green-400">Saved</span>}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Currently stored sport times */}
+                  {ttSportTimes.length > 0 && (
+                    <div>
+                      <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">
+                        {stParsed ? '↓ Currently saved (will be updated on confirm)' : 'Currently stored'} — {ttSportTimes.length} sport{ttSportTimes.length !== 1 ? 's' : ''}
+                      </h4>
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                              {['Sport', 'Manual (min)', 'Turf Tank (min)', 'Time saved'].map((col) => (
+                                <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {ttSportTimes.map((row, i) => {
+                              const saved = row.manualTimeMin && row.ttTimeMin ? Math.round(row.manualTimeMin - row.ttTimeMin) : null;
+                              const pct   = saved && row.manualTimeMin ? Math.round((saved / row.manualTimeMin) * 100) : null;
+                              return (
+                                <tr key={i} className="bg-white dark:bg-gray-900">
+                                  <td className="px-3 py-2 font-medium text-gray-900 dark:text-gray-100">{row.sport}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.manualTimeMin || '—'}</td>
+                                  <td className="px-3 py-2 text-gray-600 dark:text-gray-400">{row.ttTimeMin || '—'}</td>
+                                  <td className="px-3 py-2 text-green-700 dark:text-green-400 font-medium">
+                                    {saved ? `${saved} min${pct ? ` (${pct}%)` : ''}` : '—'}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <button
+                        onClick={() => { if (confirm('Clear all sport times?')) saveSportTimes([]); setStImportMode('replace'); }}
+                        className="mt-2 text-xs text-red-500 hover:text-red-700 dark:hover:text-red-400"
+                      >
+                        Clear all sport times
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
             </>
           )}
         </div>
