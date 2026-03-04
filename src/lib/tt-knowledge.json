@@ -2,5 +2,51 @@
   "narrative": "",
   "sports": [],
   "sportTimes": [],
+  "fieldMarkingData": {
+    "standardSports": [
+      { "sport": "Football", "time": "3:29:14", "paintUsGal": 23.541, "pricePerField": 0, "paintRowL": 4.17 },
+      { "sport": "Soccer", "time": "0:23:56", "paintUsGal": 2.26, "pricePerField": 25.47, "paintRowL": 3.86 },
+      { "sport": "Lacrosse", "time": "0:31:33", "paintUsGal": 3.14, "pricePerField": 35.39, "paintRowL": 5.37 },
+      { "sport": "Baseball", "time": "1:10:19", "paintUsGal": 0.85, "pricePerField": 0, "paintRowL": 2.7 },
+      { "sport": "400M Track", "time": "1:33:30", "paintUsGal": 12.19, "pricePerField": 137.38, "paintRowL": 20.81 },
+      { "sport": "Rugby", "time": "0:33:46", "paintUsGal": 3.38, "pricePerField": 37.99, "paintRowL": 5.74 },
+      { "sport": "Rollerders", "time": "0:28:01", "paintUsGal": 0.47, "pricePerField": 0, "paintRowL": 0.7 },
+      { "sport": "Field Hockey", "time": "0:30:56", "paintUsGal": 1.61, "pricePerField": 20.36, "paintRowL": 3.09 },
+      { "sport": "Flag Football", "time": "0:10:52", "paintUsGal": 0.98, "pricePerField": 11.0, "paintRowL": 1.66 },
+      { "sport": "Gaelic Football", "time": "0:38:43", "paintUsGal": 2.82, "pricePerField": 31.78, "paintRowL": 5.47 }
+    ],
+    "variants": [
+      { "category": "Football", "variant": "HS Practice*", "time": "3:29:14", "paintUsGal": 8.3, "pricePerField": 93.54, "paintRowL": 0 },
+      { "category": "Football", "variant": "HS Practice**", "time": "4:59:00", "paintUsGal": 0, "pricePerField": 44.55, "paintRowL": 0 },
+      { "category": "Football", "variant": "NCAA", "time": "1:29:17", "paintUsGal": 8.3, "pricePerField": 93.54, "paintRowL": 0 },
+      { "category": "Football", "variant": "NFL", "time": "3:27:23", "paintUsGal": 5.48, "pricePerField": 61.76, "paintRowL": 0 },
+      { "category": "Football", "variant": "3-Man", "time": "2:52:00", "paintUsGal": 5.27, "pricePerField": 112.93, "paintRowL": 0 },
+      { "category": "Football", "variant": "Flag F. (L)", "time": "0:11:03", "paintUsGal": 0.99, "pricePerField": 11.16, "paintRowL": 0 },
+      { "category": "Football", "variant": "Flag F. (S)", "time": "0:10:52", "paintUsGal": 0.98, "pricePerField": 10.82, "paintRowL": 0 },
+      { "category": "Football", "variant": "Canadian Football", "time": "5:31:50", "paintUsGal": 10.02, "pricePerField": 112.93, "paintRowL": 0 },
+      { "category": "Soccer", "variant": "11v11", "time": "0:23:56", "paintUsGal": 2.26, "pricePerField": 25.47, "paintRowL": 3.86 },
+      { "category": "Soccer", "variant": "9v9", "time": "0:19:56", "paintUsGal": 1.89, "pricePerField": 21.3, "paintRowL": 3.23 },
+      { "category": "Soccer", "variant": "8v8", "time": "0:15:17", "paintUsGal": 1.37, "pricePerField": 15.43, "paintRowL": 0 },
+      { "category": "Soccer", "variant": "7v7", "time": "0:26:45", "paintUsGal": 1.69, "pricePerField": 21.3, "paintRowL": 3.26 },
+      { "category": "Soccer", "variant": "4v4", "time": "0:04:04", "paintUsGal": 0.31, "pricePerField": 3.45, "paintRowL": 0.76 },
+      { "category": "Soccer", "variant": "3v3", "time": "0:02:00", "paintUsGal": 0.22, "pricePerField": 2.48, "paintRowL": 0.39 },
+      { "category": "Lacrosse", "variant": "Unified Men's/Women's", "time": "0:31:33", "paintUsGal": 3.14, "pricePerField": 35.39, "paintRowL": 0 },
+      { "category": "Lacrosse", "variant": "Unified Small Sided", "time": "0:14:57", "paintUsGal": 1.14, "pricePerField": 12.85, "paintRowL": 0 },
+      { "category": "Lacrosse", "variant": "Men's NCAA", "time": "0:19:59", "paintUsGal": 2.15, "pricePerField": 23.78, "paintRowL": 0 },
+      { "category": "Lacrosse", "variant": "Women's NCAA", "time": "0:25:10", "paintUsGal": 2.45, "pricePerField": 27.61, "paintRowL": 0 },
+      { "category": "Baseball/Softball", "variant": "Softball", "time": "0:07:29", "paintUsGal": 5.6, "pricePerField": 6.76, "paintRowL": 0 },
+      { "category": "Baseball/Softball", "variant": "Baseball", "time": "0:10:19", "paintUsGal": 0.85, "pricePerField": 9.58, "paintRowL": 0 },
+      { "category": "Athletics", "variant": "400m Track", "time": "1:33:30", "paintUsGal": 12.1, "pricePerField": 136.81, "paintRowL": 0 },
+      { "category": "Athletics", "variant": "Shotput", "time": "0:10:41", "paintUsGal": 1.02, "pricePerField": 11.5, "paintRowL": 3.86 },
+      { "category": "Athletics", "variant": "Hammer Throw", "time": "0:11:36", "paintUsGal": 1.43, "pricePerField": 16.12, "paintRowL": 5.42 },
+      { "category": "Athletics", "variant": "Discus", "time": "0:10:06", "paintUsGal": 1.15, "pricePerField": 13.75, "paintRowL": 4.6 },
+      { "category": "Athletics", "variant": "Javelin", "time": "0:15:28", "paintUsGal": 1.78, "pricePerField": 20.08, "paintRowL": 6.72 }
+    ],
+    "frequency": [
+      { "sport": "Football", "initialPerYear": 1, "overmarksPerYear": 5 },
+      { "sport": "Lacrosse", "initialPerYear": 1, "overmarksPerYear": 13 },
+      { "sport": "Baseball", "initialPerYear": 2, "overmarksPerYear": 26 }
+    ]
+  },
   "updatedAt": ""
 }

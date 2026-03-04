@@ -28,10 +28,40 @@ export interface SportTimeEntry {
   ttTimeMin: number;
 }
 
+export interface SportPaintEntry {
+  sport: string;
+  time: string;
+  paintUsGal: number;
+  pricePerField: number;
+  paintRowL: number;
+}
+
+export interface SportVariantEntry {
+  category: string;
+  variant: string;
+  time: string;
+  paintUsGal: number;
+  pricePerField: number;
+  paintRowL: number;
+}
+
+export interface SportFrequencyEntry {
+  sport: string;
+  initialPerYear: number;
+  overmarksPerYear: number;
+}
+
+export interface FieldMarkingData {
+  standardSports: SportPaintEntry[];
+  variants: SportVariantEntry[];
+  frequency: SportFrequencyEntry[];
+}
+
 export interface TTKnowledge {
   narrative: string;
   sports: SportDataEntry[];
   sportTimes: SportTimeEntry[];
+  fieldMarkingData: FieldMarkingData;
   updatedAt: string;
 }
 
@@ -44,7 +74,7 @@ export function getTTKnowledge(): TTKnowledge {
     const raw = fs.readFileSync(DATA_PATH, 'utf-8');
     return JSON.parse(raw) as TTKnowledge;
   } catch {
-    return { narrative: '', sports: [], sportTimes: [], updatedAt: '' };
+    return { narrative: '', sports: [], sportTimes: [], fieldMarkingData: { standardSports: [], variants: [], frequency: [] }, updatedAt: '' };
   }
 }
 

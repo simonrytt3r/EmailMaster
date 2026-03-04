@@ -114,6 +114,35 @@ interface SportRow {
   notes: string;
 }
 
+interface SportPaintEntry {
+  sport: string;
+  time: string;
+  paintUsGal: number;
+  pricePerField: number;
+  paintRowL: number;
+}
+
+interface SportVariantEntry {
+  category: string;
+  variant: string;
+  time: string;
+  paintUsGal: number;
+  pricePerField: number;
+  paintRowL: number;
+}
+
+interface SportFrequencyEntry {
+  sport: string;
+  initialPerYear: number;
+  overmarksPerYear: number;
+}
+
+interface FieldMarkingData {
+  standardSports: SportPaintEntry[];
+  variants: SportVariantEntry[];
+  frequency: SportFrequencyEntry[];
+}
+
 interface FetchedUpdates {
   benchmarkUpdates: BenchmarkUpdate[];
   deliverabilityChanges: DeliverabilityChange[];
@@ -259,7 +288,7 @@ function UpdateCard({
 
 function TTKnowledgePanel({ password }: { password: string }) {
   const [ttOpen, setTtOpen] = useState(false);
-  const [ttTab, setTtTab] = useState<'narrative' | 'sports' | 'times'>('narrative');
+  const [ttTab, setTtTab] = useState<'narrative' | 'sports' | 'times' | 'paint'>('narrative');
   const [ttNarrative, setTtNarrative] = useState('');
   const [ttSports, setTtSports] = useState<SportRow[]>([]);
   const [ttUpdatedAt, setTtUpdatedAt] = useState('');
@@ -300,6 +329,13 @@ function TTKnowledgePanel({ password }: { password: string }) {
   const [stSaved, setStSaved] = useState(false);
   const [stImportMode, setStImportMode] = useState<'merge' | 'replace'>('merge');
 
+  // ── Paint / Field Marking Data state ─────────────────────────────────────
+  const emptyFmd: FieldMarkingData = { standardSports: [], variants: [], frequency: [] };
+  const [pmData, setPmData] = useState<FieldMarkingData>(emptyFmd);
+  const [pmSubTab, setPmSubTab] = useState<'standard' | 'variants' | 'frequency'>('standard');
+  const [pmSaving, setPmSaving] = useState(false);
+  const [pmSaved, setPmSaved] = useState(false);
+
   async function loadTTKnowledge() {
     setTtLoading(true);
     try {
@@ -313,6 +349,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
         setTtNarrative(json.narrative ?? '');
         setTtSports(json.sports ?? []);
         setTtSportTimes(json.sportTimes ?? []);
+        setPmData(json.fieldMarkingData ?? emptyFmd);
         setTtUpdatedAt(json.updatedAt ?? '');
       }
     } catch { /* silent */ }
@@ -336,6 +373,46 @@ function TTKnowledgePanel({ password }: { password: string }) {
       }
     } catch { /* silent */ }
     finally { setTtNarrativeSaving(false); }
+  }
+
+  async function saveFieldMarking() {
+    setPmSaving(true);
+    setPmSaved(false);
+    try {
+      const res = await fetch('/api/admin/tt-knowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password, action: 'save-field-marking', fieldMarkingData: pmData }),
+      });
+      const json = await res.json();
+      if (json.success) {
+        setPmSaved(true);
+        setTtUpdatedAt(json.updatedAt ?? '');
+        setTimeout(() => setPmSaved(false), 3000);
+      }
+    } catch { /* silent */ }
+    finally { setPmSaving(false); }
+  }
+
+  function updateStandard(idx: number, field: keyof SportPaintEntry, value: string | number) {
+    setPmData(prev => ({
+      ...prev,
+      standardSports: prev.standardSports.map((s, i) => i === idx ? { ...s, [field]: value } : s),
+    }));
+  }
+
+  function updateVariant(idx: number, field: keyof SportVariantEntry, value: string | number) {
+    setPmData(prev => ({
+      ...prev,
+      variants: prev.variants.map((s, i) => i === idx ? { ...s, [field]: value } : s),
+    }));
+  }
+
+  function updateFrequency(idx: number, field: keyof SportFrequencyEntry, value: string | number) {
+    setPmData(prev => ({
+      ...prev,
+      frequency: prev.frequency.map((s, i) => i === idx ? { ...s, [field]: value } : s),
+    }));
   }
 
   async function saveTTSports(incoming: SportRow[], mode: 'replace' | 'merge' = 'replace') {
@@ -908,7 +985,7 @@ function TTKnowledgePanel({ password }: { password: string }) {
             <>
               {/* Tab bar */}
               <div className="flex border-b border-gray-200 dark:border-gray-800">
-                {(['narrative', 'sports', 'times'] as const).map((tab) => (
+                {(['narrative', 'sports', 'times', 'paint'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setTtTab(tab)}
@@ -922,7 +999,9 @@ function TTKnowledgePanel({ password }: { password: string }) {
                       ? 'Sales Intelligence'
                       : tab === 'sports'
                       ? `Savings Data${ttSports.length > 0 ? ` (${ttSports.length})` : ''}`
-                      : `Sport Times${ttSportTimes.length > 0 ? ` (${ttSportTimes.length})` : ''}`}
+                      : tab === 'times'
+                      ? `Sport Times${ttSportTimes.length > 0 ? ` (${ttSportTimes.length})` : ''}`
+                      : `Paint Data${pmData.standardSports.length > 0 ? ` (${pmData.standardSports.length})` : ''}`}
                   </button>
                 ))}
               </div>
@@ -1595,6 +1674,201 @@ function TTKnowledgePanel({ password }: { password: string }) {
                       >
                         Clear all sport times
                       </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Paint Data tab */}
+              {ttTab === 'paint' && (
+                <div className="px-6 py-5 space-y-5">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      Field marking times, paint usage, and pricing per sport. Edit directly and save.
+                    </p>
+                    <button
+                      onClick={saveFieldMarking}
+                      disabled={pmSaving}
+                      className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors shrink-0 ml-4 ${
+                        pmSaved
+                          ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                          : 'bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white'
+                      }`}
+                    >
+                      {pmSaving ? 'Saving…' : pmSaved ? '✓ Saved' : 'Save Changes'}
+                    </button>
+                  </div>
+
+                  {/* Sub-tab bar */}
+                  <div className="flex gap-1 border-b border-gray-200 dark:border-gray-700">
+                    {(['standard', 'variants', 'frequency'] as const).map((sub) => (
+                      <button
+                        key={sub}
+                        onClick={() => setPmSubTab(sub)}
+                        className={`px-4 py-2 text-xs font-medium border-b-2 transition-colors ${
+                          pmSubTab === sub
+                            ? 'border-green-500 text-green-600 dark:text-green-400'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
+                      >
+                        {sub === 'standard' ? `Standard Sports (${pmData.standardSports.length})`
+                          : sub === 'variants' ? `Variants (${pmData.variants.length})`
+                          : `Frequency (${pmData.frequency.length})`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Standard Sports sub-tab */}
+                  {pmSubTab === 'standard' && (
+                    <div className="space-y-4">
+                      {/* Bar chart */}
+                      {pmData.standardSports.length > 0 && (
+                        <div className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 space-y-2">
+                          <p className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-3">Paint Usage — US Gallons per field</p>
+                          {(() => {
+                            const maxGal = Math.max(...pmData.standardSports.map(s => s.paintUsGal), 1);
+                            return pmData.standardSports.map((s, i) => (
+                              <div key={i} className="flex items-center gap-3">
+                                <span className="text-xs text-gray-600 dark:text-gray-400 w-28 shrink-0 text-right truncate">{s.sport}</span>
+                                <div className="flex-1 bg-gray-100 dark:bg-gray-800 rounded-full h-4 overflow-hidden">
+                                  <div
+                                    className="h-full bg-green-500 dark:bg-green-600 rounded-full"
+                                    style={{ width: `${(s.paintUsGal / maxGal) * 100}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-600 dark:text-gray-400 w-14 shrink-0">{s.paintUsGal} gal</span>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      )}
+                      {/* Editable table */}
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                              {['Sport', 'Time', 'Paint US (gal)', 'Price/Field ($)', 'Paint RoW (L)'].map(col => (
+                                <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {pmData.standardSports.map((row, i) => (
+                              <tr key={i} className="bg-white dark:bg-gray-900">
+                                <td className="px-2 py-1">
+                                  <input value={row.sport} onChange={e => updateStandard(i, 'sport', e.target.value)}
+                                    className="w-full px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100" />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input value={row.time} onChange={e => updateStandard(i, 'time', e.target.value)}
+                                    className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400 font-mono" />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input type="number" step="0.001" value={row.paintUsGal} onChange={e => updateStandard(i, 'paintUsGal', parseFloat(e.target.value) || 0)}
+                                    className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400" />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input type="number" step="0.01" value={row.pricePerField} onChange={e => updateStandard(i, 'pricePerField', parseFloat(e.target.value) || 0)}
+                                    className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400" />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input type="number" step="0.01" value={row.paintRowL} onChange={e => updateStandard(i, 'paintRowL', parseFloat(e.target.value) || 0)}
+                                    className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400" />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Variants sub-tab */}
+                  {pmSubTab === 'variants' && (
+                    <div className="space-y-5">
+                      {(() => {
+                        const categories = Array.from(new Set(pmData.variants.map(v => v.category)));
+                        return categories.map(cat => {
+                          const rows = pmData.variants.map((v, globalIdx) => ({ ...v, globalIdx })).filter(v => v.category === cat);
+                          return (
+                            <div key={cat}>
+                              <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500 mb-2">{cat}</h4>
+                              <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                                <table className="min-w-full text-xs">
+                                  <thead className="bg-gray-50 dark:bg-gray-800">
+                                    <tr>
+                                      {['Variant', 'Time', 'Paint US (gal)', 'Price/Field ($)', 'Paint RoW (L)'].map(col => (
+                                        <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                                    {rows.map(({ globalIdx, variant, time, paintUsGal, pricePerField, paintRowL }) => (
+                                      <tr key={globalIdx} className="bg-white dark:bg-gray-900">
+                                        <td className="px-2 py-1">
+                                          <input value={variant} onChange={e => updateVariant(globalIdx, 'variant', e.target.value)}
+                                            className="w-full px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100" />
+                                        </td>
+                                        <td className="px-2 py-1">
+                                          <input value={time} onChange={e => updateVariant(globalIdx, 'time', e.target.value)}
+                                            className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400 font-mono" />
+                                        </td>
+                                        <td className="px-2 py-1">
+                                          <input type="number" step="0.001" value={paintUsGal} onChange={e => updateVariant(globalIdx, 'paintUsGal', parseFloat(e.target.value) || 0)}
+                                            className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400" />
+                                        </td>
+                                        <td className="px-2 py-1">
+                                          <input type="number" step="0.01" value={pricePerField} onChange={e => updateVariant(globalIdx, 'pricePerField', parseFloat(e.target.value) || 0)}
+                                            className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400" />
+                                        </td>
+                                        <td className="px-2 py-1">
+                                          <input type="number" step="0.01" value={paintRowL} onChange={e => updateVariant(globalIdx, 'paintRowL', parseFloat(e.target.value) || 0)}
+                                            className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400" />
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+
+                  {/* Frequency sub-tab */}
+                  {pmSubTab === 'frequency' && (
+                    <div>
+                      <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+                        <table className="min-w-full text-xs">
+                          <thead className="bg-gray-50 dark:bg-gray-800">
+                            <tr>
+                              {['Sport', 'Initial Marks p.a.', 'Overmarks p.a.'].map(col => (
+                                <th key={col} className="px-3 py-2 text-left font-semibold text-gray-500 dark:text-gray-400 whitespace-nowrap">{col}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                            {pmData.frequency.map((row, i) => (
+                              <tr key={i} className="bg-white dark:bg-gray-900">
+                                <td className="px-2 py-1">
+                                  <input value={row.sport} onChange={e => updateFrequency(i, 'sport', e.target.value)}
+                                    className="w-full px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-900 dark:text-gray-100" />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input type="number" value={row.initialPerYear} onChange={e => updateFrequency(i, 'initialPerYear', parseInt(e.target.value) || 0)}
+                                    className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400" />
+                                </td>
+                                <td className="px-2 py-1">
+                                  <input type="number" value={row.overmarksPerYear} onChange={e => updateFrequency(i, 'overmarksPerYear', parseInt(e.target.value) || 0)}
+                                    className="w-24 px-2 py-1 rounded border border-transparent hover:border-gray-300 dark:hover:border-gray-600 focus:border-green-500 focus:outline-none bg-transparent text-gray-600 dark:text-gray-400" />
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   )}
                 </div>

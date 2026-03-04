@@ -91,6 +91,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, count: data.sportTimes.length, updatedAt: data.updatedAt });
     }
 
+    // ── Save field marking data (paint/time data from screenshot) ─────────────
+    if (action === 'save-field-marking') {
+      const data = getTTKnowledge();
+      data.fieldMarkingData = body.fieldMarkingData ?? { standardSports: [], variants: [], frequency: [] };
+      data.updatedAt = new Date().toISOString();
+      saveTTKnowledge(data);
+      return NextResponse.json({ success: true, updatedAt: data.updatedAt });
+    }
+
     return NextResponse.json({ error: 'Unknown action.' }, { status: 400 });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
