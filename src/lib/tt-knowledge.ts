@@ -85,6 +85,19 @@ export function saveTTKnowledge(data: TTKnowledge): void {
 // ─── Prompt helpers ──────────────────────────────────────────────────────────
 
 /**
+ * Parses "H:MM:SS" into a human-readable display string and total minutes.
+ * e.g. "0:23:56" → "24 min", "3:29:14" → "3h 29min"
+ */
+function parseFieldMarkingTime(time: string): { totalMin: number; display: string } {
+  const parts = time.split(':').map(Number);
+  if (parts.length !== 3) return { totalMin: 0, display: '' };
+  const [h, m, s] = parts;
+  const totalMin = h * 60 + m + Math.round(s / 60);
+  if (h > 0) return { totalMin, display: `${h}h ${m > 0 ? `${m}min` : ''}`.trim() };
+  return { totalMin, display: `${totalMin} min` };
+}
+
+/**
  * Returns the full TT context block for the system prompt.
  * Appends any saved narrative content below the static base context.
  */
@@ -130,22 +143,31 @@ export function getSportProofPoints(industry?: string): string {
   // Look up time-only entry (separate sport times table)
   const timeMatch = knowledge.sportTimes?.find((s) => sportMatch(s.sport));
 
-  if (!match && !timeMatch) return '';
+  // Look up robot painting time from field marking data
+  const paintMatch = knowledge.fieldMarkingData?.standardSports?.find((s) => sportMatch(s.sport));
 
-  const sportName = match?.sport ?? timeMatch!.sport;
+  if (!match && !timeMatch && !paintMatch) return '';
+
+  const sportName = match?.sport ?? timeMatch?.sport ?? paintMatch!.sport;
   const lines: string[] = [
     `\n## SPORT-SPECIFIC PROOF POINTS: ${sportName}`,
     `Use these exact numbers in subject lines, opening lines, and proof points:`,
   ];
 
-  // Time comparison — prefer sportTimes if both present (dedicated source)
+  // Robot field marking time — how long the robot takes to paint the full field
+  if (paintMatch?.time) {
+    const { display } = parseFieldMarkingTime(paintMatch.time);
+    if (display) lines.push(`- Turf Tank marks a ${sportName} field in ${display} (robot operates autonomously)`);
+  }
+
+  // Operator time comparison from sportTimes (separate from painting duration)
   const manualMin = timeMatch?.manualTimeMin ?? match?.manualTimeMin;
   const ttMin     = timeMatch?.ttTimeMin     ?? match?.robotTimeMin;
   const savedMin  = manualMin && ttMin ? Math.round(manualMin - ttMin) : match?.timeSavedMin;
   const savedPct  = manualMin && savedMin ? Math.round((savedMin / manualMin) * 100) : match?.timeSavedPct;
 
   if (manualMin) lines.push(`- Manual marking time: ${manualMin} min per field`);
-  if (ttMin)     lines.push(`- Turf Tank time: ~${ttMin} min per field (robot marks autonomously)`);
+  if (ttMin)     lines.push(`- Turf Tank operator time: ~${ttMin} min per field (robot marks autonomously)`);
   if (savedMin)  lines.push(`- Time saved per marking: ${savedMin} min${savedPct ? ` (${savedPct}%)` : ''}`);
 
   // Savings data (from the full savings import if available)
